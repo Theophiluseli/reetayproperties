@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Production build output
+dist/
+build/
+
+# Environment variables & secrets
+.env
+.env.local
+.env.*.local
+
+# AI Workspace Logs, Brain & Cache
+.gemini/
+brain/
+scratch/
+.system_generated/
+*.log
+
+# Editor & OS files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
