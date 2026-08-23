@@ -16,7 +16,6 @@ import {
   X,
   LogIn,
   UserPlus,
-  User as UserIcon,
   Shield
 } from 'lucide-react';
 import { VerticalType, User } from '../../types';
@@ -67,275 +66,194 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <>
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-purple-100 shadow-sm transition-all">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="relative flex items-center justify-between h-20">
-            {/* Reetay Official Logo (Left) */}
-            <div className="flex items-center">
-              <Link to="/" className="group" onClick={() => setIsMobileMenuOpen(false)}>
-                <ReetayLogo size="md" />
-              </Link>
+      {/* Floating Capsule Header (Matching Image 2 Style with Original White Theme & Reetay Logo) */}
+      <header className="sticky top-3 z-40 px-3 sm:px-6 lg:px-8 max-w-7xl mx-auto transition-all">
+        <div className="bg-white/95 backdrop-blur-md rounded-full border border-purple-100/90 shadow-lg hover:shadow-xl transition-all px-4 sm:px-6 py-2.5 flex items-center justify-between min-h-[64px]">
+          
+          {/* Left: Reetay Official Logo */}
+          <div className="flex items-center">
+            <Link to="/" className="group flex items-center" onClick={() => setIsMobileMenuOpen(false)}>
+              <ReetayLogo size="md" />
+            </Link>
+          </div>
+
+          {/* Center Area: Public Vertical Selector OR Dashboard Console Badge */}
+          {!isDashboardRoute ? (
+            <nav className="hidden md:flex items-center bg-purple-50/70 p-1 rounded-full border border-purple-100/80 shadow-inner">
+              <button
+                onClick={() => onVerticalChange && onVerticalChange('stays')}
+                className={`flex items-center gap-2 px-5 py-1.5 rounded-full text-xs font-extrabold transition-all ${
+                  activeVertical === 'stays'
+                    ? 'bg-[#2E0854] text-white shadow-sm'
+                    : 'text-purple-900 hover:text-[#2E0854] hover:bg-white/60'
+                }`}
+              >
+                <Bed className={`w-3.5 h-3.5 ${activeVertical === 'stays' ? 'text-white' : 'text-purple-400'}`} />
+                <span>Stays</span>
+              </button>
+
+              <button
+                onClick={() => onVerticalChange && onVerticalChange('cars')}
+                className={`flex items-center gap-2 px-5 py-1.5 rounded-full text-xs font-extrabold transition-all ${
+                  activeVertical === 'cars'
+                    ? 'bg-[#2E0854] text-white shadow-sm'
+                    : 'text-purple-900 hover:text-[#2E0854] hover:bg-white/60'
+                }`}
+              >
+                <Car className={`w-3.5 h-3.5 ${activeVertical === 'cars' ? 'text-white' : 'text-purple-400'}`} />
+                <span>Cars</span>
+              </button>
+
+              <button
+                onClick={() => onVerticalChange && onVerticalChange('experiences')}
+                className={`flex items-center gap-2 px-5 py-1.5 rounded-full text-xs font-extrabold transition-all ${
+                  activeVertical === 'experiences'
+                    ? 'bg-[#2E0854] text-white shadow-sm'
+                    : 'text-purple-900 hover:text-[#2E0854] hover:bg-white/60'
+                }`}
+              >
+                <Sparkles className={`w-3.5 h-3.5 ${activeVertical === 'experiences' ? 'text-white' : 'text-purple-400'}`} />
+                <span>Experiences</span>
+              </button>
+            </nav>
+          ) : (
+            <div className="hidden md:flex items-center">
+              {location.pathname.startsWith('/admin') && (
+                <span className="px-4 py-1.5 rounded-full bg-[#2E0854] text-white text-xs font-extrabold uppercase tracking-wider flex items-center gap-2 shadow-sm border border-purple-800">
+                  <ShieldCheck className="w-4 h-4 text-amber-400" />
+                  <span>Executive Admin Console</span>
+                </span>
+              )}
+
+              {location.pathname.startsWith('/manager') && (
+                <span className="px-4 py-1.5 rounded-full bg-amber-950 text-amber-300 text-xs font-extrabold uppercase tracking-wider flex items-center gap-2 shadow-sm border border-amber-800">
+                  <Briefcase className="w-4 h-4 text-amber-400" />
+                  <span>Manager Console</span>
+                </span>
+              )}
+
+              {location.pathname.startsWith('/dashboard') && (
+                <span className="px-4 py-1.5 rounded-full bg-purple-100 text-[#2E0854] text-xs font-extrabold uppercase tracking-wider flex items-center gap-2 shadow-sm border border-purple-200">
+                  <LayoutDashboard className="w-4 h-4 text-purple-700" />
+                  <span>Guest Control Center</span>
+                </span>
+              )}
             </div>
+          )}
 
-            {/* Center Area: Public Vertical Tabs OR Dedicated Dashboard Title Badge */}
-            {!isDashboardRoute ? (
-              <nav className="absolute left-1/2 -translate-x-1/2 hidden md:flex items-center bg-purple-50/70 p-1.5 rounded-full border border-purple-100/80 shadow-inner z-10">
+          {/* Right Controls: Desktop Buttons + User Account + 3-Line Hamburger Menu */}
+          <div className="flex items-center gap-2.5">
+            
+            {/* Desktop Auth Actions */}
+            {(!currentUser || currentUser.role === 'guest') && (
+              <div className="hidden sm:flex items-center gap-2">
                 <button
-                  onClick={() => onVerticalChange && onVerticalChange('stays')}
-                  className={`flex items-center gap-2 px-5 py-2 rounded-full text-sm font-bold transition-all ${
-                    activeVertical === 'stays'
-                      ? 'bg-[#2E0854] text-white shadow-md'
-                      : 'text-purple-900 hover:text-[#2E0854] hover:bg-white/60'
-                  }`}
+                  onClick={() => handleOpenAuth('login')}
+                  className="px-4 py-2 rounded-full text-xs font-extrabold text-[#2E0854] hover:bg-purple-50 transition-all flex items-center gap-1.5"
                 >
-                  <Bed className={`w-4 h-4 ${activeVertical === 'stays' ? 'text-white' : 'text-purple-400'}`} />
-                  <span>Stays</span>
+                  <LogIn className="w-3.5 h-3.5 text-purple-700" />
+                  <span>Log in</span>
                 </button>
-                <button
-                  onClick={() => onVerticalChange && onVerticalChange('cars')}
-                  className={`flex items-center gap-2 px-5 py-2 rounded-full text-sm font-bold transition-all ${
-                    activeVertical === 'cars'
-                      ? 'bg-[#2E0854] text-white shadow-md'
-                      : 'text-purple-900 hover:text-[#2E0854] hover:bg-white/60'
-                  }`}
-                >
-                  <Car className={`w-4 h-4 ${activeVertical === 'cars' ? 'text-white' : 'text-purple-400'}`} />
-                  <span>Cars</span>
-                </button>
-                <button
-                  onClick={() => onVerticalChange && onVerticalChange('experiences')}
-                  className={`flex items-center gap-2 px-5 py-2 rounded-full text-sm font-bold transition-all ${
-                    activeVertical === 'experiences'
-                      ? 'bg-[#2E0854] text-white shadow-md'
-                      : 'text-purple-900 hover:text-[#2E0854] hover:bg-white/60'
-                  }`}
-                >
-                  <Sparkles className={`w-4 h-4 ${activeVertical === 'experiences' ? 'text-white' : 'text-purple-400'}`} />
-                  <span>Experiences</span>
-                </button>
-              </nav>
-            ) : (
-              <div className="absolute left-1/2 -translate-x-1/2 hidden md:flex items-center z-10">
-                {location.pathname.startsWith('/admin') && (
-                  <span className="px-4 py-2 rounded-full bg-[#2E0854] text-white text-xs font-extrabold uppercase tracking-wider flex items-center gap-2 shadow-sm border border-purple-800">
-                    <ShieldCheck className="w-4 h-4 text-amber-400" />
-                    <span>Executive Admin Console</span>
-                  </span>
-                )}
 
-                {location.pathname.startsWith('/manager') && (
-                  <span className="px-4 py-2 rounded-full bg-amber-950 text-amber-300 text-xs font-extrabold uppercase tracking-wider flex items-center gap-2 shadow-sm border border-amber-800">
-                    <Briefcase className="w-4 h-4 text-amber-400" />
-                    <span>Manager Console</span>
-                  </span>
-                )}
-                {location.pathname.startsWith('/dashboard') && (
-                  <span className="px-4 py-2 rounded-full bg-purple-100 text-[#2E0854] text-xs font-extrabold uppercase tracking-wider flex items-center gap-2 shadow-sm border border-purple-200">
-                    <LayoutDashboard className="w-4 h-4 text-purple-700" />
-                    <span>Guest Control Center</span>
-                  </span>
-                )}
+                <button
+                  onClick={() => handleOpenAuth('signup')}
+                  className="px-4 py-2 rounded-full text-xs font-extrabold text-white bg-[#2E0854] hover:bg-purple-900 shadow-sm hover:shadow-md active:scale-95 transition-all flex items-center gap-1.5"
+                >
+                  <UserPlus className="w-3.5 h-3.5 text-amber-300" />
+                  <span>Sign up</span>
+                </button>
               </div>
             )}
 
-            {/* Right Controls: Desktop Auth Buttons + Staff Dropdown + Hamburger Toggle */}
-            <div className="flex items-center gap-3 ml-auto">
-              
-              {/* Desktop Auth Buttons (When Logged Out or Guest) */}
-              {(!currentUser || currentUser.role === 'guest') && (
-                <div className="hidden sm:flex items-center gap-2.5">
-                  <button
-                    onClick={() => handleOpenAuth('login')}
-                    className="px-4 py-2 rounded-full text-xs font-extrabold text-[#2E0854] hover:bg-purple-50 border border-transparent hover:border-purple-200 transition-all flex items-center gap-1.5"
-                  >
-                    <LogIn className="w-3.5 h-3.5" />
-                    <span>Log in</span>
-                  </button>
+            {/* Staff / Logged In User Dropdown */}
+            {currentUser && currentUser.role !== 'guest' ? (
+              <div className="relative">
+                <button
+                  onClick={() => setShowDropdown(!showDropdown)}
+                  className="flex items-center gap-2 p-1 pr-3 rounded-full border border-purple-200 hover:border-purple-600 transition-all bg-white"
+                >
+                  <div className="w-8 h-8 rounded-full bg-[#2E0854] text-white font-black text-xs flex items-center justify-center flex-shrink-0">
+                    {getInitials(currentUser.full_name)}
+                  </div>
+                  <span className="text-xs font-extrabold text-[#2E0854] max-w-[110px] truncate hidden sm:inline">
+                    {currentUser.full_name}
+                  </span>
+                  <ChevronDown className="w-4 h-4 text-purple-400" />
+                </button>
 
-                  <button
-                    onClick={() => handleOpenAuth('signup')}
-                    className="px-5 py-2.5 rounded-full text-xs font-extrabold text-white bg-[#2E0854] hover:bg-purple-900 shadow-sm hover:shadow-md active:scale-95 transition-all flex items-center gap-1.5"
-                  >
-                    <UserPlus className="w-3.5 h-3.5 text-amber-300" />
-                    <span>Sign up</span>
-                  </button>
-                </div>
-              )}
-
-              {/* Staff / Admin User Dropdown */}
-              {currentUser && currentUser.role !== 'guest' ? (
-                <div className="relative">
-                  <button
-                    onClick={() => setShowDropdown(!showDropdown)}
-                    className="flex items-center gap-2.5 p-1.5 pr-3 rounded-full border border-purple-200 hover:border-purple-600 hover:shadow-md transition-all bg-white"
-                  >
-                    <div className="w-8 h-8 rounded-full bg-[#2E0854] text-white font-black text-xs flex items-center justify-center flex-shrink-0">
-                      {getInitials(currentUser.full_name)}
+                {showDropdown && (
+                  <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-purple-100 py-2 z-50 animate-in fade-in slide-in-from-top-2">
+                    <div className="px-4 py-3 border-b border-gray-100 bg-purple-50/40 rounded-t-2xl">
+                      <p className="text-[10px] font-black uppercase text-gray-400 mb-0.5">Logged In As</p>
+                      <p className="text-xs font-bold text-navy-950 truncate">{currentUser.full_name}</p>
+                      <p className="text-[11px] text-gray-400 truncate">{currentUser.email}</p>
                     </div>
-                    <span className="text-xs font-extrabold text-[#2E0854] max-w-[120px] truncate hidden sm:inline">
-                      {currentUser.full_name}
-                    </span>
-                    <ChevronDown className="w-4 h-4 text-purple-400" />
-                  </button>
 
-                  {/* Staff Dropdown Menu */}
-                  {showDropdown && (
-                    <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-purple-100 py-2 z-50 animate-in fade-in slide-in-from-top-2">
-                      <div className="px-4 py-3 border-b border-gray-100 bg-purple-50/40 rounded-t-2xl">
-                        <div className="flex items-center justify-between gap-1 mb-1">
-                          <p className="text-[10px] font-black uppercase text-gray-400">Account Role</p>
-                          {currentUser.role === 'receptionist' && (
-                            <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-black text-[9px] uppercase">
-                              Receptionist
-                            </span>
-                          )}
-                          {currentUser.role === 'manager' && (
-                            <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 font-black text-[9px] uppercase">
-                              Manager
-                            </span>
-                          )}
-                          {currentUser.role === 'admin' && (
-                            <span className="px-2 py-0.5 rounded-full bg-[#2E0854] text-white font-black text-[9px] uppercase">
-                              Executive Admin
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs font-bold text-navy-950 truncate">{currentUser.full_name}</p>
-                        <p className="text-[11px] text-gray-400 truncate">{currentUser.email}</p>
-                      </div>
-
-                      {/* Options based on Role */}
-                      {currentUser.role === 'receptionist' && (
-                        <div className="py-1">
-                          <Link
-                            to="/reception"
-                            onClick={() => setShowDropdown(false)}
-                            className="flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50 transition-colors"
-                          >
-                            <UserCheck className="w-4 h-4 text-emerald-600" />
-                            <span>Reception Desk</span>
-                          </Link>
-                          <Link
-                            to="/reception"
-                            onClick={() => setShowDropdown(false)}
-                            className="flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
-                          >
-                            <ClipboardList className="w-4 h-4 text-emerald-500" />
-                            <span>Check-ins & Guests</span>
-                          </Link>
-                          <button
-                            onClick={() => {
-                              setShowDropdown(false);
-                              window.dispatchEvent(new CustomEvent('open-shift-modal'));
-                            }}
-                            className="flex items-center gap-2.5 w-full text-left px-4 py-2 text-xs font-bold text-amber-700 hover:bg-amber-50 transition-colors border-t border-gray-100 mt-1 pt-2"
-                          >
-                            <Clock className="w-4 h-4 text-amber-600" />
-                            <span>End Shift & Handover Log</span>
-                          </button>
-                        </div>
-                      )}
-
-                      {currentUser.role === 'manager' && (
-                        <div className="py-1">
-                          <Link
-                            to="/manager?tab=bookings"
-                            onClick={() => setShowDropdown(false)}
-                            className="flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-navy-950 hover:bg-gold-50 transition-colors"
-                          >
-                            <Briefcase className="w-4 h-4 text-gold-600" />
-                            <span>Manager Console</span>
-                          </Link>
-                          <Link
-                            to="/manager?tab=listings"
-                            onClick={() => setShowDropdown(false)}
-                            className="flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
-                          >
-                            <Bed className="w-4 h-4 text-gold-500" />
-                            <span>Property & Vehicle Inventory</span>
-                          </Link>
-                          <button
-                            onClick={() => {
-                              setShowDropdown(false);
-                              window.dispatchEvent(new CustomEvent('open-shift-modal'));
-                            }}
-                            className="flex items-center gap-2.5 w-full text-left px-4 py-2 text-xs font-bold text-amber-700 hover:bg-amber-50 transition-colors border-t border-gray-100 mt-1 pt-2"
-                          >
-                            <Clock className="w-4 h-4 text-amber-600" />
-                            <span>End Shift & Handover Log</span>
-                          </button>
-                        </div>
-                      )}
-
-                      {currentUser.role === 'admin' && (
-                        <div className="py-1">
-                          <Link
-                            to="/admin?tab=bookings"
-                            onClick={() => setShowDropdown(false)}
-                            className="flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-[#2E0854] hover:bg-purple-50 transition-colors"
-                          >
-                            <ShieldCheck className="w-4 h-4 text-purple-700" />
-                            <span>Executive Admin Console</span>
-                          </Link>
-                          <Link
-                            to="/admin?tab=staff"
-                            onClick={() => setShowDropdown(false)}
-                            className="flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
-                          >
-                            <UserCheck className="w-4 h-4 text-emerald-600" />
-                            <span>Staff Accounts & Access</span>
-                          </Link>
-                          <Link
-                            to="/admin?tab=financials"
-                            onClick={() => setShowDropdown(false)}
-                            className="flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
-                          >
-                            <Briefcase className="w-4 h-4 text-gold-600" />
-                            <span>Financial Audit & Revenue</span>
-                          </Link>
-                        </div>
-                      )}
-
-                      <div className="border-t border-gray-100 pt-1 mt-1">
-                        <button
-                          onClick={() => {
-                            setShowDropdown(false);
-                            onLogout();
-                          }}
-                          className="flex items-center gap-2.5 w-full px-4 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 transition-colors"
+                    {currentUser.role === 'receptionist' && (
+                      <div className="py-1">
+                        <Link
+                          to="/reception"
+                          onClick={() => setShowDropdown(false)}
+                          className="flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50 transition-colors"
                         >
-                          <LogOut className="w-4 h-4" />
-                          <span>Log out</span>
-                        </button>
+                          <UserCheck className="w-4 h-4 text-emerald-600" />
+                          <span>Reception Desk</span>
+                        </Link>
                       </div>
+                    )}
+
+                    {currentUser.role === 'admin' && (
+                      <div className="py-1">
+                        <Link
+                          to="/admin?tab=bookings"
+                          onClick={() => setShowDropdown(false)}
+                          className="flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-[#2E0854] hover:bg-purple-50 transition-colors"
+                        >
+                          <ShieldCheck className="w-4 h-4 text-purple-700" />
+                          <span>Executive Admin Console</span>
+                        </Link>
+                      </div>
+                    )}
+
+                    <div className="border-t border-gray-100 pt-1 mt-1">
+                      <button
+                        onClick={() => {
+                          setShowDropdown(false);
+                          onLogout();
+                        }}
+                        className="flex items-center gap-2.5 w-full px-4 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 transition-colors"
+                      >
+                        <LogOut className="w-4 h-4" />
+                        <span>Log out</span>
+                      </button>
                     </div>
-                  )}
-                </div>
-              ) : null}
-
-              {/* Hamburger Menu Toggle Button */}
-              <button
-                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                aria-label="Toggle Navigation Menu"
-                className="flex items-center justify-center p-2.5 rounded-full border border-purple-200 bg-purple-50/50 hover:bg-purple-100 text-[#2E0854] transition-all hover:scale-105 active:scale-95 shadow-sm"
-              >
-                {isMobileMenuOpen ? (
-                  <X className="w-5 h-5 text-[#2E0854]" />
-                ) : (
-                  <Menu className="w-5 h-5 text-[#2E0854]" />
+                  </div>
                 )}
-              </button>
+              </div>
+            ) : null}
 
-            </div>
+            {/* Clean 3-Line Hamburger Icon Button (Image 2 Style) */}
+            <button
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              aria-label="Toggle Menu"
+              className="p-2 rounded-full text-[#2E0854] hover:bg-purple-50 active:scale-95 transition-all flex items-center justify-center"
+            >
+              {isMobileMenuOpen ? (
+                <X className="w-6 h-6 text-[#2E0854]" />
+              ) : (
+                <Menu className="w-6 h-6 text-[#2E0854]" />
+              )}
+            </button>
+
           </div>
         </div>
 
-        {/* Hamburger Slide-Down Menu Drawer */}
+        {/* Floating Slide-Down Drawer anchored under the Pill Header */}
         {isMobileMenuOpen && (
-          <div className="border-t border-purple-100 bg-white/98 backdrop-blur-xl shadow-2xl animate-in slide-in-from-top duration-200">
-            <div className="max-w-7xl mx-auto px-4 py-5 space-y-4">
+          <div className="mt-2 sm:mt-3 bg-white/98 backdrop-blur-2xl rounded-3xl border border-purple-100 shadow-2xl p-5 animate-in slide-in-from-top-3 duration-200">
+            <div className="space-y-4">
               
-              {/* Category Selector (Stays, Cars, Experiences) */}
+              {/* Vertical Category Switcher (Stays, Cars, Experiences) */}
               {!isDashboardRoute && (
                 <div className="bg-purple-50/80 p-1.5 rounded-2xl border border-purple-100 flex items-center justify-between gap-1">
                   <button
@@ -385,7 +303,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </div>
               )}
 
-              {/* Log In & Sign Up Action Cards */}
+              {/* Log In & Sign Up Prominent Action Cards */}
               {(!currentUser || currentUser.role === 'guest') ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                   <button
@@ -427,7 +345,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </div>
               )}
 
-              {/* Auxiliary Quick Links (Staff Portal, Concierge Support) */}
+              {/* Portal & Support Links */}
               <div className="border-t border-purple-100 pt-3 flex flex-wrap items-center justify-between gap-3 text-xs font-bold text-gray-600">
                 <Link
                   to="/staff/login"
