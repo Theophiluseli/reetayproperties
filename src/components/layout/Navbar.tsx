@@ -66,9 +66,9 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <>
-      {/* Floating Capsule Header (Matching Image 2 Style with Original White Theme & Reetay Logo) */}
-      <header className="sticky top-3 z-40 px-3 sm:px-6 lg:px-8 max-w-7xl mx-auto transition-all">
-        <div className="bg-white/95 backdrop-blur-md rounded-full border border-purple-100/90 shadow-lg hover:shadow-xl transition-all px-4 sm:px-6 py-2.5 flex items-center justify-between min-h-[64px]">
+      {/* Full-Width Responsive Floating Pill Header (Image 2 Style with White Theme) */}
+      <header className="sticky top-2 sm:top-4 z-40 w-full px-3 sm:px-6 lg:px-8 max-w-7xl mx-auto transition-all">
+        <div className="w-full bg-white/95 backdrop-blur-md rounded-full border border-purple-100/90 shadow-lg hover:shadow-xl transition-all px-4 sm:px-6 py-2.5 flex items-center justify-between min-h-[64px]">
           
           {/* Left: Reetay Official Logo */}
           <div className="flex items-center">
@@ -77,7 +77,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </Link>
           </div>
 
-          {/* Center Area: Public Vertical Selector OR Dashboard Console Badge */}
+          {/* Center Area: Public Vertical Selector (Desktop) */}
           {!isDashboardRoute ? (
             <nav className="hidden md:flex items-center bg-purple-50/70 p-1 rounded-full border border-purple-100/80 shadow-inner">
               <button
@@ -141,10 +141,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           )}
 
-          {/* Right Controls: Desktop Buttons + User Account + 3-Line Hamburger Menu */}
-          <div className="flex items-center gap-2.5">
+          {/* Right Controls: Desktop Auth Buttons + User Account + 3-Line Hamburger Menu */}
+          <div className="flex items-center gap-2 sm:gap-3">
             
-            {/* Desktop Auth Actions */}
+            {/* Desktop Auth Buttons */}
             {(!currentUser || currentUser.role === 'guest') && (
               <div className="hidden sm:flex items-center gap-2">
                 <button
@@ -232,25 +232,25 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
             ) : null}
 
-            {/* Clean 3-Line Hamburger Icon Button (Image 2 Style) */}
+            {/* Clean 3-Line Hamburger Icon Button */}
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
               aria-label="Toggle Menu"
-              className="p-2 rounded-full text-[#2E0854] hover:bg-purple-50 active:scale-95 transition-all flex items-center justify-center"
+              className="p-2 sm:p-2.5 rounded-full text-[#2E0854] hover:bg-purple-50 active:scale-95 transition-all flex items-center justify-center border border-purple-100/80 bg-purple-50/30"
             >
               {isMobileMenuOpen ? (
-                <X className="w-6 h-6 text-[#2E0854]" />
+                <X className="w-5 h-5 sm:w-6 sm:h-6 text-[#2E0854]" />
               ) : (
-                <Menu className="w-6 h-6 text-[#2E0854]" />
+                <Menu className="w-5 h-5 sm:w-6 sm:h-6 text-[#2E0854]" />
               )}
             </button>
 
           </div>
         </div>
 
-        {/* Floating Slide-Down Drawer anchored under the Pill Header */}
+        {/* Full-Width Slide-Down Drawer anchored under the Pill Header */}
         {isMobileMenuOpen && (
-          <div className="mt-2 sm:mt-3 bg-white/98 backdrop-blur-2xl rounded-3xl border border-purple-100 shadow-2xl p-5 animate-in slide-in-from-top-3 duration-200">
+          <div className="w-full mt-2 sm:mt-3 bg-white/98 backdrop-blur-2xl rounded-2xl sm:rounded-3xl border border-purple-100 shadow-2xl p-4 sm:p-5 animate-in slide-in-from-top-3 duration-200">
             <div className="space-y-4">
               
               {/* Vertical Category Switcher (Stays, Cars, Experiences) */}
@@ -303,7 +303,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </div>
               )}
 
-              {/* Log In & Sign Up Prominent Action Cards */}
+              {/* Log In & Sign Up Action Cards */}
               {(!currentUser || currentUser.role === 'guest') ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                   <button
