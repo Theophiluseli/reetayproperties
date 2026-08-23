@@ -144,22 +144,22 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Right Controls: Desktop Auth Buttons + User Account + 3-Line Hamburger Menu */}
           <div className="flex items-center gap-2 sm:gap-3">
             
-            {/* Desktop Auth Buttons */}
+            {/* Desktop & Tablet Auth Buttons */}
             {(!currentUser || currentUser.role === 'guest') && (
-              <div className="hidden sm:flex items-center gap-2.5">
+              <div className="hidden md:flex items-center gap-2.5 flex-shrink-0">
                 <button
                   onClick={() => handleOpenAuth('login')}
-                  className="px-4.5 py-2.5 rounded-full text-xs font-extrabold text-[#2E0854] bg-purple-50/70 border border-purple-200/80 hover:bg-purple-100/90 hover:border-purple-300 hover:shadow-sm active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+                  className="px-4 py-2 sm:px-5 sm:py-2.5 rounded-full text-xs sm:text-sm font-extrabold text-[#2E0854] bg-purple-50/70 border border-purple-200/80 hover:bg-purple-100/90 hover:border-purple-300 hover:shadow-sm active:scale-95 transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
                 >
-                  <LogIn className="w-3.5 h-3.5 text-purple-700" />
+                  <LogIn className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-700 flex-shrink-0" />
                   <span>Log in</span>
                 </button>
 
                 <button
                   onClick={() => handleOpenAuth('signup')}
-                  className="px-5.5 py-2.5 rounded-full text-xs font-extrabold text-white bg-gradient-to-r from-[#2E0854] via-purple-900 to-[#2E0854] hover:brightness-110 shadow-md hover:shadow-lg hover:scale-102 active:scale-95 transition-all flex items-center gap-1.5 border border-purple-800/40 cursor-pointer"
+                  className="px-4 py-2 sm:px-6 sm:py-2.5 rounded-full text-xs sm:text-sm font-extrabold text-white bg-gradient-to-r from-[#2E0854] via-purple-900 to-[#2E0854] hover:brightness-110 shadow-md hover:shadow-lg hover:scale-102 active:scale-95 transition-all flex items-center gap-1.5 border border-purple-800/40 whitespace-nowrap cursor-pointer"
                 >
-                  <UserPlus className="w-3.5 h-3.5 text-amber-300" />
+                  <UserPlus className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-300 flex-shrink-0" />
                   <span>Sign up</span>
                 </button>
               </div>
@@ -232,11 +232,11 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
             ) : null}
 
-            {/* Clean 3-Line Hamburger Icon Button */}
+            {/* Hamburger Icon Button (Mobile Only: md:hidden) */}
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
               aria-label="Toggle Menu"
-              className="p-2 sm:p-2.5 rounded-full text-[#2E0854] hover:bg-purple-50 active:scale-95 transition-all flex items-center justify-center border border-purple-100/80 bg-purple-50/30"
+              className="md:hidden p-2 sm:p-2.5 rounded-full text-[#2E0854] hover:bg-purple-50 active:scale-95 transition-all flex items-center justify-center border border-purple-100/80 bg-purple-50/30"
             >
               {isMobileMenuOpen ? (
                 <X className="w-5 h-5 sm:w-6 sm:h-6 text-[#2E0854]" />
