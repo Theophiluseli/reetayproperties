@@ -146,10 +146,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             
             {/* Desktop Auth Buttons */}
             {(!currentUser || currentUser.role === 'guest') && (
-              <div className="hidden sm:flex items-center gap-2">
+              <div className="hidden sm:flex items-center gap-2.5">
                 <button
                   onClick={() => handleOpenAuth('login')}
-                  className="px-4 py-2 rounded-full text-xs font-extrabold text-[#2E0854] hover:bg-purple-50 transition-all flex items-center gap-1.5"
+                  className="px-4.5 py-2.5 rounded-full text-xs font-extrabold text-[#2E0854] bg-purple-50/70 border border-purple-200/80 hover:bg-purple-100/90 hover:border-purple-300 hover:shadow-sm active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
                 >
                   <LogIn className="w-3.5 h-3.5 text-purple-700" />
                   <span>Log in</span>
@@ -157,7 +157,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
                 <button
                   onClick={() => handleOpenAuth('signup')}
-                  className="px-4 py-2 rounded-full text-xs font-extrabold text-white bg-[#2E0854] hover:bg-purple-900 shadow-sm hover:shadow-md active:scale-95 transition-all flex items-center gap-1.5"
+                  className="px-5.5 py-2.5 rounded-full text-xs font-extrabold text-white bg-gradient-to-r from-[#2E0854] via-purple-900 to-[#2E0854] hover:brightness-110 shadow-md hover:shadow-lg hover:scale-102 active:scale-95 transition-all flex items-center gap-1.5 border border-purple-800/40 cursor-pointer"
                 >
                   <UserPlus className="w-3.5 h-3.5 text-amber-300" />
                   <span>Sign up</span>
