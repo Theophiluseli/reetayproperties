@@ -10,6 +10,40 @@ export interface User {
   created_at: string;
 }
 
+export interface StaffPermissions {
+  can_register_walkins: boolean;
+  can_checkout_guests: boolean;
+  can_edit_booking_status: boolean;
+  can_view_financials: boolean;
+  can_send_messages: boolean;
+  can_delete_bookings?: boolean;
+}
+
+export interface StaffAccount {
+  id: string;
+  full_name: string;
+  email: string;
+  password?: string;
+  role: 'receptionist' | 'manager' | 'admin';
+  phone: string;
+  avatar_url?: string;
+  created_at: string;
+  status: 'active' | 'inactive';
+  permissions?: StaffPermissions;
+}
+
+export interface ShiftHandover {
+  id: string;
+  shift_staff_name: string;
+  shift_staff_email: string;
+  start_time: string;
+  end_time?: string;
+  notes: string;
+  checkins_completed: number;
+  checkouts_completed: number;
+  created_at: string;
+}
+
 export interface Property {
   id: string;
   title: string;
@@ -120,4 +154,33 @@ export interface FilterState {
   maxPrice: number;
   selectedAmenities: string[];
   vertical: VerticalType;
+}
+
+export interface CheckoutInventoryItem {
+  id: string;
+  category: 'Kitchen Area' | 'Living Room / Room' | 'Bathroom';
+  name: string;
+  expectedQuantity: number;
+  isIntact: boolean;
+  notes?: string;
+}
+
+export interface IncidentReport {
+  id: string;
+  booking_id: string;
+  guest_name: string;
+  guest_phone: string;
+  property_title: string;
+  inspected_by_name: string;
+  inspected_by_role: string;
+  created_at: string;
+  missing_or_damaged_items: Array<{
+    item_name: string;
+    category: string;
+    expected_qty: number;
+    notes?: string;
+  }>;
+  overall_notes?: string;
+  estimated_penalty?: number;
+  status: 'pending_review' | 'resolved';
 }

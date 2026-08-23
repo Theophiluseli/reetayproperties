@@ -12,9 +12,11 @@ CREATE TABLE public.users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   full_name TEXT NOT NULL,
   email TEXT UNIQUE NOT NULL,
+  password_hash TEXT,
   avatar_url TEXT,
   role user_role DEFAULT 'guest',
   phone TEXT,
+  status TEXT DEFAULT 'active',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
@@ -82,13 +84,16 @@ CREATE TABLE public.reviews (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 5. Favorites Table
-CREATE TABLE public.favorites (
+-- 5. Support Tickets Table
+CREATE TABLE public.support_tickets (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
-  property_id UUID REFERENCES public.properties(id) ON DELETE CASCADE,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
-  UNIQUE(user_id, property_id)
+  user_name TEXT NOT NULL,
+  user_email TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  message TEXT NOT NULL,
+  status VARCHAR(20) DEFAULT 'open',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
 -- Enable Row Level Security (RLS)
@@ -96,8 +101,10 @@ ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.properties ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.bookings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.reviews ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.favorites ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.support_tickets ENABLE ROW LEVEL SECURITY;
 
--- Allow public read access to properties
+-- Allow public access policies
 CREATE POLICY "Public properties read access" ON public.properties FOR SELECT USING (true);
 CREATE POLICY "Public reviews read access" ON public.reviews FOR SELECT USING (true);
+CREATE POLICY "Public support tickets insert access" ON public.support_tickets FOR INSERT WITH CHECK (true);
+CREATE POLICY "Public support tickets select access" ON public.support_tickets FOR SELECT USING (true);

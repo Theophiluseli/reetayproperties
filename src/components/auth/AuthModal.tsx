@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { X, Mail, Lock, User as UserIcon, Sparkles } from 'lucide-react';
+import { X, Mail, Lock, User as UserIcon } from 'lucide-react';
 import { dataService } from '../../lib/supabase';
 import { User } from '../../types';
+import { ReetayLogo } from '../common/ReetayLogo';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -38,45 +39,38 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
-  const handleGuestDemo = async () => {
-    setLoading(true);
-    const user = await dataService.login('david@reetay.com');
-    onSuccess(user);
-    setLoading(false);
-  };
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-950/60 backdrop-blur-sm animate-in fade-in">
-      <div className="bg-white rounded-3xl max-w-md w-full p-8 shadow-2xl border border-gray-100 relative overflow-hidden">
+      <div className="bg-white rounded-3xl max-w-md w-full p-8 shadow-2xl border border-purple-100 relative overflow-hidden">
         
         {/* Close */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors"
+          className="absolute top-4 right-4 w-8 h-8 rounded-full bg-purple-50 flex items-center justify-center text-purple-900 hover:bg-purple-100 transition-colors"
         >
           <X className="w-4 h-4" />
         </button>
 
-        {/* Brand Header */}
+        {/* Brand Header with Reetay Official Logo */}
         <div className="text-center space-y-2 mb-6">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-gold-600 via-amber-500 to-yellow-400 flex items-center justify-center mx-auto shadow-lg shadow-gold-500/20">
-            <span className="text-white font-black text-2xl">R</span>
+          <div className="flex justify-center mb-3">
+            <ReetayLogo size="md" />
           </div>
-          <h2 className="text-2xl font-black text-navy-950">
+          <h2 className="text-2xl font-black text-[#2E0854]">
             {mode === 'login' ? 'Welcome Back' : 'Create Account'}
           </h2>
-          <p className="text-xs text-gray-400 font-medium">
-            Access your luxury stays, bookings, and VIP concierge desk
+          <p className="text-xs text-purple-950/70 font-semibold">
+            Reetay Properties
           </p>
         </div>
 
         {/* Mode Tabs */}
-        <div className="flex bg-gray-100 p-1 rounded-xl mb-6">
+        <div className="flex bg-purple-50/70 p-1.5 rounded-2xl mb-6 border border-purple-100">
           <button
             type="button"
             onClick={() => setMode('login')}
-            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
-              mode === 'login' ? 'bg-white text-navy-950 shadow-sm' : 'text-gray-500 hover:text-navy-950'
+            className={`flex-1 py-2 text-xs font-black rounded-xl transition-all ${
+              mode === 'login' ? 'bg-[#2E0854] text-white shadow-md' : 'text-purple-900 hover:text-[#2E0854]'
             }`}
           >
             Log In
@@ -84,8 +78,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <button
             type="button"
             onClick={() => setMode('signup')}
-            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
-              mode === 'signup' ? 'bg-white text-navy-950 shadow-sm' : 'text-gray-500 hover:text-navy-950'
+            className={`flex-1 py-2 text-xs font-black rounded-xl transition-all ${
+              mode === 'signup' ? 'bg-[#2E0854] text-white shadow-md' : 'text-purple-900 hover:text-[#2E0854]'
             }`}
           >
             Sign Up
@@ -96,15 +90,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         <form onSubmit={handleSubmit} className="space-y-4">
           {mode === 'signup' && (
             <div>
-              <label className="text-[10px] uppercase font-bold text-gray-400 block mb-1">Full Name</label>
-              <div className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 flex items-center gap-2">
-                <UserIcon className="w-4 h-4 text-gold-600" />
+              <label className="text-[10px] uppercase font-black text-[#2E0854] block mb-1 tracking-wider">Full Name</label>
+              <div className="bg-purple-50/30 border border-purple-200 rounded-xl px-3 py-2.5 flex items-center gap-2 focus-within:border-purple-600 focus-within:bg-white transition-all">
+                <UserIcon className="w-4 h-4 text-purple-700" />
                 <input
                   type="text"
-                  placeholder="David Reetay"
+                  placeholder="Enter your full name"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  className="bg-transparent text-sm font-semibold text-navy-950 outline-none w-full"
+                  className="bg-transparent text-sm font-extrabold text-[#2E0854] placeholder:text-gray-400 outline-none w-full"
                   required
                 />
               </div>
@@ -112,30 +106,30 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           )}
 
           <div>
-            <label className="text-[10px] uppercase font-bold text-gray-400 block mb-1">Email Address</label>
-            <div className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 flex items-center gap-2">
-              <Mail className="w-4 h-4 text-gold-600" />
+            <label className="text-[10px] uppercase font-black text-[#2E0854] block mb-1 tracking-wider">Email Address</label>
+            <div className="bg-purple-50/30 border border-purple-200 rounded-xl px-3 py-2.5 flex items-center gap-2 focus-within:border-purple-600 focus-within:bg-white transition-all">
+              <Mail className="w-4 h-4 text-purple-700" />
               <input
                 type="email"
-                placeholder="david@reetay.com"
+                placeholder="name@reetay.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="bg-transparent text-sm font-semibold text-navy-950 outline-none w-full"
+                className="bg-transparent text-sm font-extrabold text-[#2E0854] placeholder:text-gray-400 outline-none w-full"
                 required
               />
             </div>
           </div>
 
           <div>
-            <label className="text-[10px] uppercase font-bold text-gray-400 block mb-1">Password</label>
-            <div className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 flex items-center gap-2">
-              <Lock className="w-4 h-4 text-gold-600" />
+            <label className="text-[10px] uppercase font-black text-[#2E0854] block mb-1 tracking-wider">Password</label>
+            <div className="bg-purple-50/30 border border-purple-200 rounded-xl px-3 py-2.5 flex items-center gap-2 focus-within:border-purple-600 focus-within:bg-white transition-all">
+              <Lock className="w-4 h-4 text-purple-700" />
               <input
                 type="password"
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="bg-transparent text-sm font-semibold text-navy-950 outline-none w-full"
+                className="bg-transparent text-sm font-extrabold text-[#2E0854] placeholder:text-gray-400 outline-none w-full"
                 required
               />
             </div>
@@ -144,26 +138,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3.5 rounded-xl bg-navy-950 hover:bg-navy-900 text-white font-bold text-sm shadow-md active:scale-95 transition-all"
+            className="w-full py-3.5 rounded-xl bg-[#2E0854] hover:bg-black text-white font-black text-sm shadow-md active:scale-95 transition-all mt-2"
           >
             {loading ? 'Processing...' : mode === 'login' ? 'Log In to Account' : 'Create Free Account'}
           </button>
         </form>
 
-        {/* Demo Quick Log-in */}
-        <div className="mt-4 border-t border-gray-100 pt-4 text-center">
-          <p className="text-xs text-gray-400 mb-2">Or continue with quick demo profile:</p>
-          <button
-            type="button"
-            onClick={handleGuestDemo}
-            className="w-full py-2.5 rounded-xl bg-gold-50 border border-gold-300 text-navy-950 font-bold text-xs hover:bg-gold-100 flex items-center justify-center gap-2"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-gold-600" />
-            <span>Instant Demo Guest Access</span>
-          </button>
-        </div>
-
       </div>
     </div>
   );
 };
+

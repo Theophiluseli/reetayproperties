@@ -38,7 +38,7 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onLoginSuccess }
   };
 
   return (
-    <div className="min-h-[calc(100vh-10rem)] flex items-center justify-center p-4 bg-gradient-to-b from-navy-950 via-navy-900 to-[#0F172A]">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-b from-navy-950 via-navy-900 to-[#0F172A]">
       <div className="bg-white rounded-3xl max-w-md w-full p-8 shadow-2xl border border-gray-100 relative overflow-hidden space-y-6">
         
         {/* Header */}
@@ -85,7 +85,7 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onLoginSuccess }
             disabled={loading}
             className="w-full py-3.5 rounded-xl bg-navy-950 hover:bg-navy-900 text-white font-bold text-sm shadow-md active:scale-95 transition-all"
           >
-            {loading ? 'Authenticating...' : 'Sign In as Administrator'}
+            {loading ? 'Authenticating...' : 'Log in'}
           </button>
         </form>
 

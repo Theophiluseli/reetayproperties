@@ -2,16 +2,13 @@ import React from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
-  CreditCard,
   CalendarCheck,
-  MessageSquare,
+  History,
+  PlusCircle,
   Star,
-  Heart,
-  Bell,
   HelpCircle,
   LogOut,
-  UserCog,
-  User as UserIcon
+  UserCog
 } from 'lucide-react';
 import { User } from '../../types';
 
@@ -23,31 +20,19 @@ interface SidebarNavProps {
 export const SidebarNav: React.FC<SidebarNavProps> = ({ user, onLogout }) => {
   const navSections = [
     {
-      title: 'MAIN',
+      title: 'BOOKINGS',
       items: [
-        { label: 'Dashboard Home', path: '/dashboard', icon: LayoutDashboard },
+        { label: 'Dashboard Overview', path: '/dashboard', icon: LayoutDashboard },
+        { label: 'Current Bookings', path: '/dashboard/bookings?tab=current', icon: CalendarCheck },
+        { label: 'Previous Bookings', path: '/dashboard/bookings?tab=previous', icon: History },
+        { label: 'Add New Booking', path: '/', icon: PlusCircle },
       ]
     },
     {
-      title: 'ACCOUNT',
+      title: 'HELP & REVIEWS',
       items: [
-        { label: 'Payments', path: '/dashboard/payments', icon: CreditCard },
-      ]
-    },
-    {
-      title: 'ACTIVITY',
-      items: [
-        { label: 'My Bookings', path: '/dashboard/bookings', icon: CalendarCheck },
-        { label: 'My Messages', path: '/dashboard/messages', icon: MessageSquare },
         { label: 'My Reviews', path: '/dashboard/reviews', icon: Star },
-        { label: 'My Favorites', path: '/dashboard/favorites', icon: Heart },
-      ]
-    },
-    {
-      title: 'PREFERENCES',
-      items: [
-        { label: 'Notifications', path: '/dashboard/notifications', icon: Bell },
-        { label: 'Support & Help', path: '/dashboard/support', icon: HelpCircle },
+        { label: 'Contact & Support', path: '/dashboard/support', icon: HelpCircle },
       ]
     }
   ];

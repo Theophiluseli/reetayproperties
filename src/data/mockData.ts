@@ -22,7 +22,7 @@ export const MOCK_RECEPTIONIST_USER: User = {
 
 export const MOCK_MANAGER_USER: User = {
   id: 'mgt_01',
-  full_name: 'Kofi Mensah (Operations Manager)',
+  full_name: 'Philip (Operations Manager)',
   email: 'manager@reetay.com',
   avatar_url: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80',
   role: 'manager',
@@ -238,7 +238,7 @@ export const MOCK_PROPERTIES: Property[] = [
     rating: 4.90,
     review_count: 19,
     host: {
-      name: 'Kofi Mensah',
+      name: 'Philip',
       avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=200&q=80',
       superhost: true
     }
@@ -272,8 +272,7 @@ export const MOCK_PROPERTIES: Property[] = [
       'Spacious seating & clean interiors'
     ],
     images: [
-      'https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&w=1000&q=80',
-      'https://images.unsplash.com/photo-1570125909232-eb263c188f7e?auto=format&fit=crop&w=1000&q=80'
+      '/images/cars/airport_dropoff.jpg'
     ],
     badge: 'Summer Deals',
     status: 'published',
@@ -314,8 +313,7 @@ export const MOCK_PROPERTIES: Property[] = [
       'Spacious seating & clean interiors'
     ],
     images: [
-      'https://images.unsplash.com/photo-1570125909232-eb263c188f7e?auto=format&fit=crop&w=1000&q=80',
-      'https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&w=1000&q=80'
+      '/images/cars/toyota_coaster.jpg'
     ],
     badge: 'Summer Deals',
     status: 'published',
@@ -356,8 +354,7 @@ export const MOCK_PROPERTIES: Property[] = [
       'USB / Type-C charging ports'
     ],
     images: [
-      'https://images.unsplash.com/photo-1563720223185-11003d516935?auto=format&fit=crop&w=1000&q=80',
-      'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=1000&q=80'
+      '/images/cars/hyundai_santa_fe.jpg'
     ],
     badge: 'Summer Deals',
     status: 'published',
@@ -398,8 +395,7 @@ export const MOCK_PROPERTIES: Property[] = [
       'Spacious seating & clean interiors'
     ],
     images: [
-      'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=1000&q=80',
-      'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?auto=format&fit=crop&w=1000&q=80'
+      '/images/cars/hyundai_sonata.jpg'
     ],
     badge: 'Summer Deals',
     status: 'published',
@@ -440,8 +436,7 @@ export const MOCK_PROPERTIES: Property[] = [
       'Spacious seating & clean interiors'
     ],
     images: [
-      'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=1000&q=80',
-      'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=1000&q=80'
+      '/images/cars/land_cruiser.jpg'
     ],
     badge: 'Summer Deals',
     status: 'published',
@@ -482,8 +477,7 @@ export const MOCK_PROPERTIES: Property[] = [
       'Spacious seating & clean interiors'
     ],
     images: [
-      'https://images.unsplash.com/photo-1590362891991-f776e747a588?auto=format&fit=crop&w=1000&q=80',
-      'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?auto=format&fit=crop&w=1000&q=80'
+      '/images/cars/toyota_yaris.jpg'
     ],
     badge: 'Summer Deals',
     status: 'published',
@@ -524,8 +518,7 @@ export const MOCK_PROPERTIES: Property[] = [
       'USB / Type-C charging ports'
     ],
     images: [
-      'https://images.unsplash.com/photo-1519641471654-76ce0107ad1b?auto=format&fit=crop&w=1000&q=80',
-      'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=1000&q=80'
+      '/images/cars/mitsubishi_eclipse.jpg'
     ],
     badge: 'Summer Deals',
     status: 'published',
@@ -566,8 +559,7 @@ export const MOCK_PROPERTIES: Property[] = [
       'Spacious seating & clean interiors'
     ],
     images: [
-      'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=1000&q=80',
-      'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?auto=format&fit=crop&w=1000&q=80'
+      '/images/cars/toyota_corolla.jpg'
     ],
     badge: 'Summer Deals',
     status: 'published',
@@ -608,8 +600,7 @@ export const MOCK_PROPERTIES: Property[] = [
       'USB / Type-C charging ports'
     ],
     images: [
-      'https://images.unsplash.com/photo-1563720223185-11003d516935?auto=format&fit=crop&w=1000&q=80',
-      'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=1000&q=80'
+      '/images/cars/toyota_highlander.jpg'
     ],
     badge: 'Summer Deals',
     status: 'published',
@@ -650,8 +641,7 @@ export const MOCK_PROPERTIES: Property[] = [
       'Spacious seating & clean interiors'
     ],
     images: [
-      'https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&w=1000&q=80',
-      'https://images.unsplash.com/photo-1570125909232-eb263c188f7e?auto=format&fit=crop&w=1000&q=80'
+      '/images/cars/toyota_hiace_van.jpg'
     ],
     badge: 'Summer Deals',
     status: 'published',
@@ -772,7 +762,7 @@ export const MOCK_BOOKINGS: Booking[] = [
     booking_type: 'walk_in',
     booking_category: 'overnight',
     created_by_role: 'manager',
-    created_by_name: 'Kofi Mensah (Manager)',
+    created_by_name: 'Philip (Manager)',
     arrival_status: 'checked_out'
   }
 ];

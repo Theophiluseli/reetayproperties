@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { dataService } from '../../lib/supabase';
 import { Property, Booking, User, VerticalType } from '../../types';
+import { IncomingReservationsDesk } from '../../components/dashboard/IncomingReservationsDesk';
 import {
   Briefcase,
   Plus,
@@ -27,16 +28,30 @@ import {
   FileText,
   Upload
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, Navigate, useSearchParams } from 'react-router-dom';
 
 interface ManagerDashboardPageProps {
   managerUser: User | null;
 }
 
 export const ManagerDashboardPage: React.FC<ManagerDashboardPageProps> = ({ managerUser }) => {
+  if (!managerUser) {
+    return <Navigate to="/portal/login" replace />;
+  }
+  const [searchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab') || searchParams.get('view');
+
   const [properties, setProperties] = useState<Property[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
-  const [activeTab, setActiveTab] = useState<'bookings' | 'listings'>('bookings');
+  const [activeTab, setActiveTab] = useState<'bookings' | 'listings'>(
+    tabParam === 'listings' ? 'listings' : 'bookings'
+  );
+
+  useEffect(() => {
+    if (tabParam === 'listings') setActiveTab('listings');
+    else if (tabParam === 'bookings') setActiveTab('bookings');
+  }, [tabParam]);
+  const [selectedVertical, setSelectedVertical] = useState<VerticalType>('stays');
   const [inventoryVerticalFilter, setInventoryVerticalFilter] = useState<'all' | VerticalType>('all');
 
   // Modals state
@@ -147,12 +162,18 @@ export const ManagerDashboardPage: React.FC<ManagerDashboardPageProps> = ({ mana
   const handleOpenAddModal = () => {
     setEditingProperty(null);
     setPropTitle('');
-    setPropVertical('cars');
-    setPropPrice(95);
-    setPropUnitLabel('Starting from');
+    setPropVertical(selectedVertical);
+    setPropPrice(selectedVertical === 'cars' ? 95 : selectedVertical === 'experiences' ? 150 : 250);
+    setPropUnitLabel(selectedVertical === 'cars' ? 'Starting from' : selectedVertical === 'experiences' ? 'per person' : 'per night');
     setPropArea('Airport Residential');
     setPropCity('Accra');
-    setCoverImage('https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&w=1000&q=80');
+    setCoverImage(
+      selectedVertical === 'cars'
+        ? 'https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&w=1000&q=80'
+        : selectedVertical === 'experiences'
+        ? 'https://images.unsplash.com/photo-1544551763-46a013bb70d5?auto=format&fit=crop&w=1000&q=80'
+        : 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1000&q=80'
+    );
     setGalleryImages([
       'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=800&q=80',
       'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?auto=format&fit=crop&w=800&q=80',
@@ -160,18 +181,30 @@ export const ManagerDashboardPage: React.FC<ManagerDashboardPageProps> = ({ mana
       'https://images.unsplash.com/photo-1580273916550-e323be2ae537?auto=format&fit=crop&w=800&q=80'
     ]);
     setNewGalleryUrlInput('');
-    setPropDescription('Executive luxury rental vehicle with climate control, high comfort, and driver options.');
+    setPropDescription(
+      selectedVertical === 'cars'
+        ? 'Executive luxury rental vehicle with climate control, high comfort, and driver options.'
+        : selectedVertical === 'experiences'
+        ? 'VIP local experience package with professional host and concierge tour guide.'
+        : 'Luxury serviced residence with full amenities, 24/7 power backup, and pool access.'
+    );
     setPropBadge('Summer Deals');
     setPropFuelType('Petrol');
     setPropTransmission('Automatic');
     setPropVehicleType('SUV');
     setPropPickupLocations('Accra, Kumasi, Sunyani, Takoradi');
     setPropDropoffLocations('Cape Coast, Ho, Wa, Sunyani, Accra');
-    setPropMaxGuests(5);
-    setPropBedrooms(0);
-    setPropBeds(0);
-    setPropBathrooms(0);
-    setSelectedAmenities(['GPS', 'Air-condition', 'Bluetooth audio connectivity', 'Spacious seating & clean interiors']);
+    setPropMaxGuests(selectedVertical === 'cars' ? 5 : selectedVertical === 'experiences' ? 10 : 4);
+    setPropBedrooms(selectedVertical === 'stays' ? 2 : 0);
+    setPropBeds(selectedVertical === 'stays' ? 2 : 0);
+    setPropBathrooms(selectedVertical === 'stays' ? 2 : 0);
+    setSelectedAmenities(
+      selectedVertical === 'cars'
+        ? ['GPS', 'Air-condition', 'Bluetooth audio connectivity', 'Spacious seating & clean interiors']
+        : selectedVertical === 'experiences'
+        ? ['Private Tour Guide', 'Refreshments Included', 'VIP Shuttle Transport']
+        : ['WiFi', 'Air-condition', 'Fully Equipped Kitchen', 'Swimming Pool', '24/7 Security']
+    );
     setShowPropertyModal(true);
   };
 
@@ -271,7 +304,7 @@ export const ManagerDashboardPage: React.FC<ManagerDashboardPageProps> = ({ mana
         special_requests: specialNotes,
         booking_category: 'overnight',
         created_by_role: 'manager',
-        created_by_name: managerUser?.full_name || 'Kofi Mensah (Manager)'
+        created_by_name: managerUser?.full_name || 'Philip (Manager)'
       });
       setShowClientModal(false);
       setClientName('');
@@ -304,7 +337,7 @@ export const ManagerDashboardPage: React.FC<ManagerDashboardPageProps> = ({ mana
           </div>
           <h1 className="text-3xl font-black">Reetay Fleet & Property Operations</h1>
           <p className="text-xs text-gray-300">
-            Logged in as {managerUser?.full_name || 'Kofi Mensah (Manager)'}. Manage stays, cars, experiences, revenue, and client bookings.
+            Logged in as {managerUser?.full_name || 'Philip (Manager)'}. Manage stays, cars, experiences, revenue, and client bookings.
           </p>
         </div>
 
@@ -327,6 +360,56 @@ export const ManagerDashboardPage: React.FC<ManagerDashboardPageProps> = ({ mana
         </div>
       </div>
 
+      {/* Management Portal Vertical Switcher Bar */}
+      <div className="flex justify-center pt-2">
+        <div className="bg-purple-50/70 p-1.5 rounded-full border border-purple-100/80 inline-flex items-center gap-1.5 shadow-sm">
+          <button
+            onClick={() => {
+              setSelectedVertical('stays');
+              setInventoryVerticalFilter('stays');
+            }}
+            className={`px-6 py-2.5 rounded-full text-xs font-black transition-all flex items-center gap-2 ${
+              selectedVertical === 'stays'
+                ? 'bg-[#2E0854] text-white shadow-lg scale-[1.02]'
+                : 'text-purple-900 hover:bg-white/80'
+            }`}
+          >
+            <Bed className="w-4 h-4 text-purple-300" />
+            <span>Stays</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setSelectedVertical('cars');
+              setInventoryVerticalFilter('cars');
+            }}
+            className={`px-6 py-2.5 rounded-full text-xs font-black transition-all flex items-center gap-2 ${
+              selectedVertical === 'cars'
+                ? 'bg-[#2E0854] text-white shadow-lg scale-[1.02]'
+                : 'text-purple-900 hover:bg-white/80'
+            }`}
+          >
+            <Car className="w-4 h-4 text-purple-300" />
+            <span>Cars</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setSelectedVertical('experiences');
+              setInventoryVerticalFilter('experiences');
+            }}
+            className={`px-6 py-2.5 rounded-full text-xs font-black transition-all flex items-center gap-2 ${
+              selectedVertical === 'experiences'
+                ? 'bg-[#2E0854] text-white shadow-lg scale-[1.02]'
+                : 'text-purple-900 hover:bg-white/80'
+            }`}
+          >
+            <Sparkles className="w-4 h-4 text-gold-400" />
+            <span>Experiences</span>
+          </button>
+        </div>
+      </div>
+
       {/* Operations Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm">
@@ -342,9 +425,13 @@ export const ManagerDashboardPage: React.FC<ManagerDashboardPageProps> = ({ mana
         </div>
 
         <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm">
-          <span className="text-xs font-bold text-gray-400 uppercase">Total Active Fleet & Stays</span>
-          <div className="text-3xl font-black text-navy-950 mt-2">{properties.length}</div>
-          <span className="text-[10px] text-amber-600 font-bold">Stays, Cars & Experiences</span>
+          <span className="text-xs font-bold text-gray-400 uppercase">
+            Active {selectedVertical.toUpperCase()} Inventory
+          </span>
+          <div className="text-3xl font-black text-navy-950 mt-2">
+            {properties.filter(p => p.vertical === selectedVertical || (!p.vertical && selectedVertical === 'stays')).length}
+          </div>
+          <span className="text-[10px] text-amber-600 font-bold">Filtered for {selectedVertical}</span>
         </div>
 
         <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm">
@@ -366,7 +453,11 @@ export const ManagerDashboardPage: React.FC<ManagerDashboardPageProps> = ({ mana
           }`}
         >
           <FileText className="w-4 h-4 text-gold-400" />
-          <span>Receptionist & Online Booking Feed ({bookings.length})</span>
+          <span>
+            {selectedVertical === 'cars' ? 'Fleet Rental & Dispatch Log' :
+             selectedVertical === 'experiences' ? 'Tour & Concierge Log' :
+             'Receptionist & Online Booking Feed'} ({bookings.filter(b => (b.property?.vertical || 'stays') === selectedVertical).length})
+          </span>
         </button>
         <button
           onClick={() => setActiveTab('listings')}
@@ -375,92 +466,22 @@ export const ManagerDashboardPage: React.FC<ManagerDashboardPageProps> = ({ mana
           }`}
         >
           <Building className="w-4 h-4 text-gold-400" />
-          <span>Listings & Fleet Inventory ({properties.length})</span>
+          <span>
+            {selectedVertical.toUpperCase()} Inventory ({properties.filter(p => (p.vertical || 'stays') === selectedVertical).length})
+          </span>
         </button>
       </div>
 
       {/* Tab 1: Bookings Feed */}
       {activeTab === 'bookings' && (
-        <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden space-y-4">
-          <div className="p-6 border-b border-gray-100 flex items-center justify-between">
-            <div>
-              <h3 className="text-base font-black text-navy-950">Live Reservations Log</h3>
-              <p className="text-xs text-gray-500">Live operational log showing walk-ins, short-time stays, and client check-ins</p>
-            </div>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-gray-50 text-gray-400 uppercase font-black border-b border-gray-100">
-                <tr>
-                  <th className="p-4">Ref & Type</th>
-                  <th className="p-4">Client Name</th>
-                  <th className="p-4">Residence / Vehicle</th>
-                  <th className="p-4">Dates / Hours</th>
-                  <th className="p-4">Creator / Role</th>
-                  <th className="p-4">Arrival Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 font-semibold text-navy-950">
-                {bookings.map((b) => (
-                  <tr key={b.id} className="hover:bg-gray-50/50">
-                    <td className="p-4">
-                      <span className="font-mono font-black text-gold-600 block">{b.id}</span>
-                      <span className="text-[9px] uppercase font-bold text-gray-400">
-                        {b.booking_category === 'short_time' ? `Short-Time (${b.short_time_hours}h)` : 'Overnight'}
-                      </span>
-                    </td>
-
-                    <td className="p-4">
-                      <p className="font-extrabold text-navy-950">{b.guest_name}</p>
-                      <p className="text-gray-400 text-[11px]">{b.guest_phone}</p>
-                    </td>
-
-                    <td className="p-4 font-extrabold">{b.property.title}</td>
-
-                    <td className="p-4">
-                      <span>{b.check_in} &rarr; {b.check_out}</span>
-                      {b.check_in_time ? (
-                        <span className="block text-[10px] text-purple-700 font-bold">⏰ {b.check_in_time} - {b.check_out_time} (Out)</span>
-                      ) : (
-                        <span className="block text-[10px] text-gray-400 font-bold">Check-Out: {b.check_out} 12:00 PM</span>
-                      )}
-                    </td>
-
-                    <td className="p-4">
-                      <span className="text-navy-950 font-bold block">{b.created_by_name || 'Online Guest'}</span>
-                      <span className="text-[9px] font-black uppercase text-gold-600">{b.created_by_role || 'guest'}</span>
-                    </td>
-
-                    <td className="p-4 flex flex-col gap-1 items-start">
-                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${
-                        b.arrival_status === 'checked_in'
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : b.status === 'completed'
-                          ? 'bg-gray-100 text-gray-600'
-                          : 'bg-amber-100 text-amber-800'
-                      }`}>
-                        {b.arrival_status === 'checked_in' ? 'Checked In' : b.status === 'completed' ? 'Checked Out' : 'Expected'}
-                      </span>
-
-                      {b.arrival_status === 'checked_in' && (
-                        <button
-                          onClick={async () => {
-                            await dataService.checkOutGuest(b.id);
-                            loadData();
-                          }}
-                          className="px-3 py-1 rounded-full bg-purple-600 hover:bg-purple-700 text-white font-bold text-[10px] shadow-sm"
-                        >
-                          Check-Out Client
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <IncomingReservationsDesk
+          bookings={bookings}
+          properties={properties}
+          onRefresh={loadData}
+          currentUserRole="manager"
+          currentUserName={managerUser?.full_name || 'Operations Manager'}
+          selectedVertical={selectedVertical}
+        />
       )}
 
       {/* Tab 2: Inventory Management (Listings CRUD) */}
@@ -472,37 +493,47 @@ export const ManagerDashboardPage: React.FC<ManagerDashboardPageProps> = ({ mana
               <p className="text-xs text-gray-500">Create, edit, toggle availability status, or remove listings across Stays, Cars, and Experiences</p>
             </div>
 
-            {/* Vertical Pill Filter Bar */}
-            <div className="flex items-center gap-1.5 bg-gray-100 p-1 rounded-full text-xs font-extrabold">
+            <div className="flex flex-wrap items-center gap-3">
               <button
-                onClick={() => setInventoryVerticalFilter('all')}
-                className={`px-3 py-1.5 rounded-full transition-all ${inventoryVerticalFilter === 'all' ? 'bg-white text-navy-950 shadow-sm' : 'text-gray-500'}`}
+                onClick={handleOpenAddModal}
+                className="px-4 py-2 bg-navy-950 text-white rounded-full text-xs font-bold hover:bg-navy-900 flex items-center gap-1.5 shadow-md active:scale-95 transition-all"
               >
-                All ({properties.length})
+                <Plus className="w-4 h-4 text-gold-400 stroke-[3]" />
+                <span>Add New {selectedVertical === 'cars' ? 'Vehicle' : selectedVertical === 'experiences' ? 'Experience' : 'Stay'} Package</span>
               </button>
-              <button
-                onClick={() => setInventoryVerticalFilter('stays')}
-                className={`px-3 py-1.5 rounded-full transition-all ${inventoryVerticalFilter === 'stays' ? 'bg-white text-navy-950 shadow-sm' : 'text-gray-500'}`}
-              >
-                Stays ({properties.filter(p => p.vertical === 'stays').length})
-              </button>
-              <button
-                onClick={() => setInventoryVerticalFilter('cars')}
-                className={`px-3 py-1.5 rounded-full transition-all ${inventoryVerticalFilter === 'cars' ? 'bg-white text-navy-950 shadow-sm' : 'text-gray-500'}`}
-              >
-                Cars ({properties.filter(p => p.vertical === 'cars').length})
-              </button>
-              <button
-                onClick={() => setInventoryVerticalFilter('experiences')}
-                className={`px-3 py-1.5 rounded-full transition-all ${inventoryVerticalFilter === 'experiences' ? 'bg-white text-navy-950 shadow-sm' : 'text-gray-500'}`}
-              >
-                Experiences ({properties.filter(p => p.vertical === 'experiences').length})
-              </button>
+
+              {/* Vertical Pill Filter Bar */}
+              <div className="flex items-center gap-1.5 bg-gray-100 p-1 rounded-full text-xs font-extrabold">
+                <button
+                  onClick={() => setInventoryVerticalFilter('all')}
+                  className={`px-3 py-1.5 rounded-full transition-all ${inventoryVerticalFilter === 'all' ? 'bg-white text-navy-950 shadow-sm' : 'text-gray-500'}`}
+                >
+                  All ({properties.length})
+                </button>
+                <button
+                  onClick={() => setInventoryVerticalFilter('stays')}
+                  className={`px-3 py-1.5 rounded-full transition-all ${inventoryVerticalFilter === 'stays' ? 'bg-white text-navy-950 shadow-sm' : 'text-gray-500'}`}
+                >
+                  Stays ({properties.filter(p => p.vertical === 'stays').length})
+                </button>
+                <button
+                  onClick={() => setInventoryVerticalFilter('cars')}
+                  className={`px-3 py-1.5 rounded-full transition-all ${inventoryVerticalFilter === 'cars' ? 'bg-white text-navy-950 shadow-sm' : 'text-gray-500'}`}
+                >
+                  Cars ({properties.filter(p => p.vertical === 'cars').length})
+                </button>
+                <button
+                  onClick={() => setInventoryVerticalFilter('experiences')}
+                  className={`px-3 py-1.5 rounded-full transition-all ${inventoryVerticalFilter === 'experiences' ? 'bg-white text-navy-950 shadow-sm' : 'text-gray-500'}`}
+                >
+                  Experiences ({properties.filter(p => p.vertical === 'experiences').length})
+                </button>
+              </div>
             </div>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full text-left text-xs min-w-[750px]">
               <thead className="bg-gray-50 text-gray-400 uppercase font-black border-b border-gray-100">
                 <tr>
                   <th className="p-4">Listing / Fleet</th>
@@ -565,23 +596,25 @@ export const ManagerDashboardPage: React.FC<ManagerDashboardPageProps> = ({ mana
                       </button>
                     </td>
 
-                    <td className="p-4 text-right space-x-2">
-                      <button
-                        onClick={() => handleOpenEditModal(p)}
-                        className="p-1.5 rounded-lg bg-gray-100 hover:bg-gold-100 text-navy-950 hover:text-gold-700 transition-all inline-flex items-center gap-1 text-[11px] font-bold"
-                        title="Edit Listing"
-                      >
-                        <Edit2 className="w-3.5 h-3.5 text-gold-600" />
-                        <span>Edit</span>
-                      </button>
-                      <button
-                        onClick={() => handleDeleteProperty(p.id)}
-                        className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 transition-all inline-flex items-center gap-1 text-[11px] font-bold"
-                        title="Delete Listing"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        <span>Delete</span>
-                      </button>
+                    <td className="p-4 text-right whitespace-nowrap">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => handleOpenEditModal(p)}
+                          className="px-3 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-[#2E0854] transition-all inline-flex items-center gap-1.5 text-[11px] font-black shrink-0 border border-purple-100"
+                          title="Edit Listing"
+                        >
+                          <Edit2 className="w-3.5 h-3.5 text-purple-700" />
+                          <span>Edit</span>
+                        </button>
+                        <button
+                          onClick={() => handleDeleteProperty(p.id)}
+                          className="px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 transition-all inline-flex items-center gap-1.5 text-[11px] font-black shrink-0 border border-rose-100"
+                          title="Delete Listing"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                          <span>Delete</span>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

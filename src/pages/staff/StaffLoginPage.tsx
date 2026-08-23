@@ -68,14 +68,14 @@ export const StaffLoginPage: React.FC<StaffLoginPageProps> = ({ onLoginSuccess }
   };
 
   return (
-    <div className="min-h-[calc(100vh-10rem)] flex items-center justify-center p-4 bg-gradient-to-b from-navy-950 via-navy-900 to-[#0F172A]">
-      <div className="bg-white rounded-3xl max-w-md w-full p-8 shadow-2xl border border-gray-100 relative overflow-hidden space-y-6">
+    <div className="min-h-screen flex items-center justify-center p-3 sm:p-4 bg-gradient-to-b from-navy-950 via-navy-900 to-[#0F172A]">
+      <div className="bg-white rounded-3xl max-w-md w-full p-5 sm:p-8 shadow-2xl border border-gray-100 relative overflow-hidden space-y-5 sm:space-y-6">
         
         {/* Header */}
-        <div className="text-center space-y-2 flex flex-col items-center">
-          <ReetayLogo size="lg" className="mb-2" />
-          <h1 className="text-2xl font-black text-navy-950">Staff & Operations Portal</h1>
-          <p className="text-xs text-gray-400 font-medium">
+        <div className="text-center space-y-1.5 flex flex-col items-center">
+          <ReetayLogo size="lg" className="mb-1" />
+          <h1 className="text-xl sm:text-2xl font-black text-navy-950">Staff & Operations Portal</h1>
+          <p className="text-[11px] sm:text-xs text-gray-400 font-medium">
             Sign in as Receptionist, Manager, or Admin
           </p>
         </div>
@@ -85,34 +85,34 @@ export const StaffLoginPage: React.FC<StaffLoginPageProps> = ({ onLoginSuccess }
           <button
             type="button"
             onClick={() => handleRoleTabChange('receptionist')}
-            className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 ${
+            className={`flex-1 py-2 px-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all flex items-center justify-center gap-1 ${
               roleMode === 'receptionist' ? 'bg-emerald-600 text-white shadow-md' : 'text-gray-500'
             }`}
           >
-            <UserCheck className="w-3.5 h-3.5" />
-            <span>Receptionist</span>
+            <UserCheck className="w-3.5 h-3.5 flex-shrink-0" />
+            <span className="truncate">Receptionist</span>
           </button>
 
           <button
             type="button"
             onClick={() => handleRoleTabChange('manager')}
-            className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 ${
+            className={`flex-1 py-2 px-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all flex items-center justify-center gap-1 ${
               roleMode === 'manager' ? 'bg-gold-500 text-navy-950 shadow-md' : 'text-gray-500'
             }`}
           >
-            <Briefcase className="w-3.5 h-3.5" />
-            <span>Manager</span>
+            <Briefcase className="w-3.5 h-3.5 flex-shrink-0" />
+            <span className="truncate">Manager</span>
           </button>
 
           <button
             type="button"
             onClick={() => handleRoleTabChange('admin')}
-            className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 ${
+            className={`flex-1 py-2 px-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all flex items-center justify-center gap-1 ${
               roleMode === 'admin' ? 'bg-navy-950 text-white shadow-md' : 'text-gray-500'
             }`}
           >
-            <ShieldCheck className="w-3.5 h-3.5" />
-            <span>Admin</span>
+            <ShieldCheck className="w-3.5 h-3.5 flex-shrink-0" />
+            <span className="truncate">Admin</span>
           </button>
         </div>
 
@@ -153,7 +153,7 @@ export const StaffLoginPage: React.FC<StaffLoginPageProps> = ({ onLoginSuccess }
             disabled={loading}
             className="w-full py-3.5 rounded-xl bg-navy-950 hover:bg-navy-900 text-white font-bold text-sm shadow-md active:scale-95 transition-all"
           >
-            {loading ? 'Authenticating...' : `Sign In to ${roleMode.toUpperCase()} Dashboard`}
+            {loading ? 'Authenticating...' : 'Log in'}
           </button>
         </form>
 

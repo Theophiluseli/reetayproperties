@@ -1,0 +1,45 @@
+{
+  "name": "Reetay Luxury Hospitality & Fleet Platform",
+  "short_name": "Reetay Platform",
+  "description": "Book luxury short-stay apartments, executive car rentals, and curated African experiences with Reetay Properties.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#18052B",
+  "theme_color": "#2E0854",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/reetay-logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/reetay-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["travel", "hospitality", "lifestyle", "business"],
+  "shortcuts": [
+    {
+      "name": "Book Stays",
+      "short_name": "Stays",
+      "description": "Browse luxury short-stay apartments in Ghana",
+      "url": "/?vertical=stays"
+    },
+    {
+      "name": "Car Rentals",
+      "short_name": "Cars",
+      "description": "Rent executive vehicles and airport drop-offs",
+      "url": "/?vertical=cars"
+    },
+    {
+      "name": "Staff Portal",
+      "short_name": "Staff Portal",
+      "description": "Access Receptionist, Manager, and Admin console",
+      "url": "/portal/login"
+    }
+  ]
+}

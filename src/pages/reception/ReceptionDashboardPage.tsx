@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { dataService } from '../../lib/supabase';
 import { Property, Booking, User } from '../../types';
+import { IncomingReservationsDesk } from '../../components/dashboard/IncomingReservationsDesk';
 import {
   UserCheck,
   Plus,
@@ -13,18 +14,46 @@ import {
   X,
   Sparkles,
   Bed,
-  LogOut
+  LogOut,
+  Calendar,
+  RefreshCw
 } from 'lucide-react';
+
+import { StaffPermissions, ShiftHandover } from '../../types';
+
+import { Link, Navigate } from 'react-router-dom';
 
 interface ReceptionDashboardPageProps {
   receptionUser: User | null;
 }
 
 export const ReceptionDashboardPage: React.FC<ReceptionDashboardPageProps> = ({ receptionUser }) => {
+  if (!receptionUser) {
+    return <Navigate to="/portal/login" replace />;
+  }
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [showWalkInModal, setShowWalkInModal] = useState(false);
   const [selectedViewBooking, setSelectedViewBooking] = useState<Booking | null>(null);
+
+  // Shift, Calendar Sync & Permissions State
+  const [staffPermissions, setStaffPermissions] = useState<StaffPermissions | undefined>(undefined);
+  const [shiftHandovers, setShiftHandovers] = useState<ShiftHandover[]>([]);
+  const [showShiftModal, setShowShiftModal] = useState(false);
+  const [showCalendarSyncModal, setShowCalendarSyncModal] = useState(false);
+  const [isSyncingCalendar, setIsSyncingCalendar] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+  const [shiftNotes, setShiftNotes] = useState('');
+  const [shiftStartTime] = useState(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+
+  const handleForceResync = async () => {
+    setIsSyncingCalendar(true);
+    await loadData();
+    setTimeout(() => {
+      setLastSyncTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      setIsSyncingCalendar(false);
+    }, 800);
+  };
 
   // Form State
   const [bookingCategory, setBookingCategory] = useState<'overnight' | 'short_time'>('short_time');
@@ -44,16 +73,50 @@ export const ReceptionDashboardPage: React.FC<ReceptionDashboardPageProps> = ({ 
 
   useEffect(() => {
     loadData();
-  }, []);
+    const handleOpenShiftModal = () => setShowShiftModal(true);
+    window.addEventListener('open-shift-modal', handleOpenShiftModal);
+    return () => window.removeEventListener('open-shift-modal', handleOpenShiftModal);
+  }, [receptionUser]);
 
   const loadData = async () => {
     const allProps = await dataService.getProperties('stays');
     const allBookings = await dataService.getBookings();
+    const handovers = await dataService.getShiftHandovers();
     setProperties(allProps);
     setBookings(allBookings);
+    setShiftHandovers(handovers);
+
     if (allProps.length > 0 && !selectedPropertyId) {
       setSelectedPropertyId(allProps[0].id);
     }
+
+    // Match permissions for current logged in receptionist
+    const staffList = await dataService.getStaffAccounts();
+    const currentUserEmail = receptionUser?.email || 'reception@reetay.com';
+    const currentStaff = staffList.find(s => s.email.toLowerCase() === currentUserEmail.toLowerCase());
+    if (currentStaff && currentStaff.permissions) {
+      setStaffPermissions(currentStaff.permissions);
+    }
+  };
+
+  const handleCompleteShiftHandover = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const activeCheckedIn = bookings.filter(b => b.arrival_status === 'checked_in').length;
+    const completedCheckouts = bookings.filter(b => b.status === 'completed').length;
+
+    await dataService.createShiftHandover({
+      shift_staff_name: receptionUser?.full_name || 'Front Desk Receptionist',
+      shift_staff_email: receptionUser?.email || 'reception@reetay.com',
+      start_time: shiftStartTime,
+      notes: shiftNotes || 'Shift change complete. All live check-in keys and room statuses updated.',
+      checkins_completed: activeCheckedIn,
+      checkouts_completed: completedCheckouts
+    });
+
+    setShowShiftModal(false);
+    setShiftNotes('');
+    await dataService.logout();
+    window.location.href = '/portal/login';
   };
 
   const handleCheckInGuest = async (bookingId: string) => {
@@ -61,22 +124,35 @@ export const ReceptionDashboardPage: React.FC<ReceptionDashboardPageProps> = ({ 
     loadData();
   };
 
+  // Automatically update Total Price Charged whenever selected room, stay dates, category, or duration changes
+  useEffect(() => {
+    if (!selectedPropertyId || properties.length === 0) return;
+    const selectedProp = properties.find(p => p.id === selectedPropertyId);
+    if (!selectedProp) return;
+
+    if (bookingCategory === 'overnight') {
+      const start = new Date(checkInDate);
+      const end = new Date(checkOutDate);
+      const diffTime = end.getTime() - start.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      const nights = diffDays > 0 ? diffDays : 1;
+      setAgreedPrice(selectedProp.price_per_night * nights);
+    } else {
+      const baseNightPrice = selectedProp.price_per_night;
+      if (shortTimeHours === 2) setAgreedPrice(Math.round(baseNightPrice * 0.35));
+      else if (shortTimeHours === 4) setAgreedPrice(Math.round(baseNightPrice * 0.50));
+      else if (shortTimeHours === 6) setAgreedPrice(Math.round(baseNightPrice * 0.65));
+      else setAgreedPrice(Math.round(baseNightPrice * 0.80));
+
+      const [h, m] = checkInTime.split(':').map(Number);
+      const outH = (h + shortTimeHours) % 24;
+      setCheckOutTime(`${outH.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`);
+    }
+  }, [selectedPropertyId, checkInDate, checkOutDate, bookingCategory, shortTimeHours, checkInTime, properties]);
+
   // Recalculate price when short_time_hours changes
   const handleShortTimeHoursChange = (hours: number) => {
     setShortTimeHours(hours);
-    const selectedProp = properties.find(p => p.id === selectedPropertyId);
-    const baseNightPrice = selectedProp ? selectedProp.price_per_night : 200;
-    
-    // Calculate short-time pricing ratio
-    if (hours === 2) setAgreedPrice(Math.round(baseNightPrice * 0.35));
-    else if (hours === 4) setAgreedPrice(Math.round(baseNightPrice * 0.50));
-    else if (hours === 6) setAgreedPrice(Math.round(baseNightPrice * 0.65));
-    else setAgreedPrice(Math.round(baseNightPrice * 0.80));
-
-    // Update checkOutTime calculation
-    const [h, m] = checkInTime.split(':').map(Number);
-    const outH = (h + hours) % 24;
-    setCheckOutTime(`${outH.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`);
   };
 
   const handleRegisterBooking = async (e: React.FormEvent) => {
@@ -118,252 +194,146 @@ export const ReceptionDashboardPage: React.FC<ReceptionDashboardPageProps> = ({ 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 animate-in fade-in">
       
-      {/* Front Desk Receptionist Header */}
-      <div className="bg-gradient-to-r from-emerald-950 via-emerald-900 to-navy-950 text-white rounded-3xl p-8 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-black uppercase">
-            <UserCheck className="w-3.5 h-3.5" />
-            <span>Front Desk Reception Desk</span>
-          </div>
-          <h1 className="text-3xl font-black">Guest Check-In & Walk-in Desk</h1>
-          <p className="text-xs text-emerald-200">
-            Welcome {receptionUser?.full_name || 'Abena Osei'}. Check in arriving guests and record overnight or short-time walk-ins.
-          </p>
-        </div>
 
-        <button
-          onClick={() => setShowWalkInModal(true)}
-          className="px-6 py-3.5 rounded-full bg-gradient-to-r from-gold-400 via-amber-500 to-gold-500 text-navy-950 font-black text-xs shadow-xl flex items-center justify-center gap-2 active:scale-95 transition-all"
-        >
-          <Plus className="w-4 h-4 stroke-[3]" />
-          <span>New Walk-in / Short-Time Booking</span>
-        </button>
-      </div>
 
       {/* Reception Desk Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm">
-          <span className="text-xs font-bold text-gray-400 uppercase">In-House Guests</span>
-          <div className="text-3xl font-black text-emerald-600 mt-2">{activeInHouse.length}</div>
-          <span className="text-[10px] text-gray-400 font-bold">Currently checked in</span>
+        {/* Card 1: In-House Guests */}
+        <div className="bg-gradient-to-br from-emerald-50/70 via-white to-white p-5 rounded-3xl border border-emerald-200/80 shadow-sm space-y-1.5 hover:shadow-md transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-black text-emerald-800 uppercase tracking-wider">In-House Guests</span>
+            <div className="w-7 h-7 rounded-full bg-emerald-100/80 flex items-center justify-center text-emerald-700">
+              <UserCheck className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="text-3xl font-black text-emerald-600">{activeInHouse.length}</div>
+          <span className="text-[10px] text-emerald-700/80 font-bold block">Currently checked in</span>
         </div>
 
-        <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm">
-          <span className="text-xs font-bold text-gray-400 uppercase">Expected Arrivals</span>
-          <div className="text-3xl font-black text-amber-600 mt-2">{expectedToday.length}</div>
-          <span className="text-[10px] text-gray-400 font-bold">Online & Manager Reservations</span>
+        {/* Card 2: Expected Arrivals */}
+        <div className="bg-gradient-to-br from-amber-50/70 via-white to-white p-5 rounded-3xl border border-amber-200/80 shadow-sm space-y-1.5 hover:shadow-md transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-black text-amber-800 uppercase tracking-wider">Expected Arrivals</span>
+            <div className="w-7 h-7 rounded-full bg-amber-100/80 flex items-center justify-center text-amber-700">
+              <Clock className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="text-3xl font-black text-amber-600">{expectedToday.length}</div>
+          <span className="text-[10px] text-amber-700/80 font-bold block">Online & Manager Reservations</span>
         </div>
 
-        <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm">
-          <span className="text-xs font-bold text-gray-400 uppercase">Short-Time Stays</span>
-          <div className="text-3xl font-black text-navy-950 mt-2">
+        {/* Card 3: Short-Time Stays */}
+        <div className="bg-gradient-to-br from-purple-50/70 via-white to-white p-5 rounded-3xl border border-purple-200/80 shadow-sm space-y-1.5 hover:shadow-md transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-black text-purple-900 uppercase tracking-wider">Short-Time Stays</span>
+            <div className="w-7 h-7 rounded-full bg-purple-100/80 flex items-center justify-center text-purple-700">
+              <Bed className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="text-3xl font-black text-purple-950">
             {bookings.filter(b => b.booking_category === 'short_time').length}
           </div>
-          <span className="text-[10px] text-gray-400 font-bold">2h / 4h / 6h Hourly Stays</span>
+          <span className="text-[10px] text-purple-800/80 font-bold block">2h / 4h / 6h Hourly Stays</span>
         </div>
 
-        <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm">
-          <span className="text-xs font-bold text-gray-400 uppercase">Calendar Sync</span>
-          <div className="text-3xl font-black text-emerald-600 mt-2 flex items-center gap-2">
-            <Lock className="w-6 h-6" />
+        {/* Card 4: Calendar Sync */}
+        <div className="bg-gradient-to-br from-teal-50/70 via-white to-white p-5 rounded-3xl border border-teal-200/80 shadow-sm space-y-1.5 hover:shadow-md transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-black text-teal-800 uppercase tracking-wider">Calendar Sync</span>
+            <div className="w-7 h-7 rounded-full bg-teal-100/80 flex items-center justify-center text-teal-700">
+              <Lock className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="text-3xl font-black text-teal-600 flex items-center gap-1.5">
             <span>Active</span>
           </div>
-          <span className="text-[10px] text-gray-400 font-bold">Dates locked upon entry</span>
+          <span className="text-[10px] text-teal-700/80 font-bold block">Dates locked upon entry</span>
         </div>
       </div>
 
-      {/* Main Reception Table & Mobile Card View */}
-      <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden space-y-4">
-        <div className="p-6 border-b border-gray-100 flex items-center justify-between">
-          <div>
-            <h3 className="text-base font-black text-navy-950">Arrival Verification & Front Desk Records</h3>
-            <p className="text-xs text-gray-500">Confirm client arrivals for bookings made online, by managers, or by admins</p>
+      {/* Incoming Reservations & Check-In Desk */}
+      <IncomingReservationsDesk
+        bookings={bookings}
+        properties={properties}
+        onRefresh={loadData}
+        currentUserRole="receptionist"
+        currentUserName={receptionUser?.full_name || 'Abena Osei'}
+        permissions={staffPermissions}
+      />
+
+      {/* Modal: Shift Handover & Log Notes */}
+      {showShiftModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-950/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 border border-gray-100 shadow-2xl space-y-4">
+            <div className="flex justify-between items-center border-b border-gray-100 pb-3">
+              <div className="flex items-center gap-2">
+                <Clock className="w-5 h-5 text-purple-700" />
+                <h3 className="font-extrabold text-navy-950 text-base">Complete Shift & Handover Log</h3>
+              </div>
+              <button onClick={() => setShowShiftModal(false)}>
+                <X className="w-5 h-5 text-gray-400" />
+              </button>
+            </div>
+
+            <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 text-xs space-y-1 font-semibold text-navy-950">
+              <div className="flex justify-between">
+                <span className="text-gray-400 uppercase text-[10px]">Outgoing Staff:</span>
+                <span className="font-bold">{receptionUser?.full_name || 'Front Desk Staff'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400 uppercase text-[10px]">Shift Start:</span>
+                <span className="font-bold">{shiftStartTime}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400 uppercase text-[10px]">In-House Guests:</span>
+                <span className="font-bold text-emerald-600">{activeInHouse.length} Guests</span>
+              </div>
+            </div>
+
+            <form onSubmit={handleCompleteShiftHandover} className="space-y-4">
+              <div>
+                <label className="text-[10px] uppercase font-bold text-gray-400 block mb-1">
+                  Shift Handover Notes & Operational Comments
+                </label>
+                <textarea
+                  rows={4}
+                  value={shiftNotes}
+                  onChange={(e) => setShiftNotes(e.target.value)}
+                  placeholder="Record keys handed over, special guest requests, pending cash collections, or room maintenance notes for the incoming receptionist..."
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs font-bold text-navy-950 outline-none"
+                  required
+                />
+              </div>
+
+
+
+              <div className="pt-2 flex justify-end gap-2 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setShowShiftModal(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-gray-500 hover:bg-gray-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-purple-900 hover:bg-purple-950 text-white font-bold text-xs shadow-md"
+                >
+                  Submit Handover & Logout Shift
+                </button>
+              </div>
+            </form>
           </div>
         </div>
+      )}
 
-        {/* Mobile View: Responsive Cards (block md:hidden) */}
-        <div className="block md:hidden space-y-4 px-4 pb-6">
-          {bookings.map((b) => {
-            const isCheckedIn = b.arrival_status === 'checked_in';
-            const isShortTime = b.booking_category === 'short_time';
-            return (
-              <div
-                key={b.id}
-                onClick={() => setSelectedViewBooking(b)}
-                className={`p-5 rounded-3xl border transition-all cursor-pointer space-y-3.5 ${
-                  isCheckedIn ? 'bg-emerald-50/40 border-emerald-200' : 'bg-white border-purple-100 shadow-sm'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-mono font-black text-gold-600 text-xs">{b.id}</span>
-                  <span className={`text-[9px] font-black uppercase px-2.5 py-0.5 rounded-full ${
-                    isShortTime ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
-                  }`}>
-                    {isShortTime ? `Short-Time (${b.short_time_hours}h)` : 'Overnight Stay'}
-                  </span>
-                </div>
 
-                <div>
-                  <h4 className="text-sm font-black text-navy-950">{b.guest_name}</h4>
-                  <p className="text-xs text-emerald-700 font-mono font-bold">{b.guest_phone}</p>
-                </div>
 
-                <div className="bg-gray-50 p-3 rounded-2xl border border-gray-100 text-xs">
-                  <span className="text-[10px] text-gray-400 font-bold block uppercase">Residence</span>
-                  <span className="font-extrabold text-navy-950">{b.property.title}</span>
-                </div>
-
-                <div className="flex items-center justify-between text-xs text-gray-600 font-semibold pt-1">
-                  <div>
-                    <span className="text-[10px] text-gray-400 block uppercase">Dates</span>
-                    <span>{b.check_in} &rarr; {b.check_out}</span>
-                  </div>
-                  <span className="text-xs font-black text-[#2E0854]">${b.total_price}</span>
-                </div>
-
-                <div className="pt-2 flex items-center justify-end">
-                  {isCheckedIn ? (
-                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase">
-                      <CheckCircle className="w-3.5 h-3.5" /> Checked In
-                    </span>
-                  ) : b.status === 'completed' ? (
-                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-gray-100 text-gray-600 text-[10px] font-bold uppercase">
-                      Checked Out (Completed)
-                    </span>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedViewBooking(b);
-                      }}
-                      className="w-full py-3 px-4 rounded-full bg-[#10B981] hover:bg-[#059669] text-white font-extrabold text-xs shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-all"
-                    >
-                      <UserCheck className="w-4 h-4 stroke-[2.5]" />
-                      <span>Check-In Client</span>
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Desktop View: Clean Responsive Table (hidden md:block) */}
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-gray-50 text-gray-400 uppercase font-black border-b border-gray-100">
-              <tr>
-                <th className="p-4">Ref & Type</th>
-                <th className="p-4">Client Name & Phone</th>
-                <th className="p-4">Residence Reserved</th>
-                <th className="p-4">Dates & Time</th>
-                <th className="p-4">Booked By</th>
-                <th className="p-4 text-right">Arrival Verification</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 font-semibold text-navy-950">
-              {bookings.map((b) => {
-                const isCheckedIn = b.arrival_status === 'checked_in';
-                const isShortTime = b.booking_category === 'short_time';
-                return (
-                  <tr
-                    key={b.id}
-                    onClick={() => setSelectedViewBooking(b)}
-                    className={`cursor-pointer transition-colors ${isCheckedIn ? 'bg-emerald-50/30 hover:bg-emerald-50/50' : 'hover:bg-purple-50/30'}`}
-                  >
-                    <td className="p-4">
-                      <span className="font-mono font-black text-gold-600 block">{b.id}</span>
-                      <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
-                        isShortTime ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
-                      }`}>
-                        {isShortTime ? `Short-Time (${b.short_time_hours}h)` : 'Overnight Stay'}
-                      </span>
-                    </td>
-
-                    <td className="p-4">
-                      <p className="font-extrabold text-navy-950">{b.guest_name}</p>
-                      <p className="text-gray-400 text-[11px]">{b.guest_email}</p>
-                      <p className="text-emerald-700 text-[11px] font-mono font-bold">{b.guest_phone}</p>
-                    </td>
-
-                    <td className="p-4 font-extrabold text-[#2E0854] max-w-[200px] truncate">{b.property.title}</td>
-
-                    <td className="p-4">
-                      <span>{b.check_in} &rarr; {b.check_out}</span>
-                      {isShortTime ? (
-                        <span className="block text-[10px] text-purple-700 font-bold">
-                          ⏰ {b.check_in_time} - {b.check_out_time} (Out)
-                        </span>
-                      ) : (
-                        <span className="block text-[10px] text-gray-400 font-bold">
-                          Check-Out: {b.check_out} 12:00 PM
-                        </span>
-                      )}
-                    </td>
-
-                    <td className="p-4">
-                      <span className="text-navy-950 font-bold block">
-                        {b.created_by_name || b.created_by_role || 'Online Guest'}
-                      </span>
-                      <span className="text-[9px] uppercase font-bold text-gray-400">
-                        {b.created_by_role || 'Online'}
-                      </span>
-                    </td>
-
-                    <td className="p-4 text-right">
-                      <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
-                        {isCheckedIn ? (
-                          <div className="flex items-center gap-2">
-                            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase">
-                              <CheckCircle className="w-3.5 h-3.5" /> Checked In
-                            </span>
-                            <button
-                              type="button"
-                              onClick={async () => {
-                                await dataService.checkOutGuest(b.id);
-                                loadData();
-                              }}
-                              className="px-3 py-1 rounded-full bg-purple-600 hover:bg-purple-700 text-white font-bold text-[10px] shadow-sm transition-all"
-                            >
-                              Check-Out
-                            </button>
-                          </div>
-                        ) : b.status === 'completed' ? (
-                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-gray-100 text-gray-600 text-[10px] font-bold uppercase">
-                            Checked Out (Completed)
-                          </span>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => setSelectedViewBooking(b)}
-                            className="px-4 py-1.5 rounded-full bg-[#10B981] hover:bg-[#059669] text-white font-black text-xs shadow-md flex items-center gap-1.5 active:scale-95 transition-all"
-                          >
-                            <UserCheck className="w-3.5 h-3.5 stroke-[2.5]" />
-                            <span>Check-In Client</span>
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Modal: Record Walk-in / Short-Time Booking */}
       {showWalkInModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-950/60 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 border border-gray-100 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center border-b border-gray-100 pb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-gold-100 text-gold-700 flex items-center justify-center">
-                  <Sparkles className="w-4 h-4" />
-                </div>
-                <h3 className="font-extrabold text-navy-950 text-base">Front Desk Walk-in Registration</h3>
-              </div>
+              <h3 className="font-extrabold text-navy-950 text-base">Front Desk Walk-in Registration</h3>
               <button onClick={() => setShowWalkInModal(false)}>
                 <X className="w-5 h-5 text-gray-400" />
               </button>
@@ -379,10 +349,7 @@ export const ReceptionDashboardPage: React.FC<ReceptionDashboardPageProps> = ({ 
             <div className="flex bg-gray-100 p-1 rounded-xl">
               <button
                 type="button"
-                onClick={() => {
-                  setBookingCategory('overnight');
-                  setAgreedPrice(250);
-                }}
+                onClick={() => setBookingCategory('overnight')}
                 className={`flex-1 py-2 text-xs font-extrabold rounded-lg transition-all ${
                   bookingCategory === 'overnight' ? 'bg-navy-950 text-white shadow-sm' : 'text-gray-500'
                 }`}
@@ -391,15 +358,12 @@ export const ReceptionDashboardPage: React.FC<ReceptionDashboardPageProps> = ({ 
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setBookingCategory('short_time');
-                  handleShortTimeHoursChange(4);
-                }}
+                onClick={() => setBookingCategory('short_time')}
                 className={`flex-1 py-2 text-xs font-extrabold rounded-lg transition-all ${
                   bookingCategory === 'short_time' ? 'bg-gold-500 text-navy-950 shadow-sm' : 'text-gray-500'
                 }`}
               >
-                ⚡ Short-Time (Hourly)
+                Short-Time (Hourly)
               </button>
             </div>
 
@@ -506,7 +470,6 @@ export const ReceptionDashboardPage: React.FC<ReceptionDashboardPageProps> = ({ 
                   <div>
                     <label className="text-[10px] uppercase font-bold text-gray-400 block mb-1">Time Slot (Check in/out)</label>
                     <div className="flex items-center gap-1 text-xs font-bold text-navy-950 bg-gray-50 p-2 rounded-xl border border-gray-200">
-                      <Clock className="w-3.5 h-3.5 text-gold-600" />
                       <span>{checkInTime} - {checkOutTime}</span>
                     </div>
                   </div>
@@ -525,9 +488,8 @@ export const ReceptionDashboardPage: React.FC<ReceptionDashboardPageProps> = ({ 
 
               <button
                 type="submit"
-                className="w-full py-3.5 bg-navy-950 text-white font-black text-xs rounded-xl shadow-md flex items-center justify-center gap-2 hover:bg-navy-900 transition-all"
+                className="w-full py-3.5 bg-navy-950 text-white font-black text-xs rounded-xl shadow-md flex items-center justify-center hover:bg-navy-900 transition-all"
               >
-                <Lock className="w-4 h-4 text-gold-400" />
                 <span>Confirm {bookingCategory === 'short_time' ? 'Short-Time' : 'Overnight'} & Lock Calendar</span>
               </button>
             </form>

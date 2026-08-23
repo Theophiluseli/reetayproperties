@@ -80,3 +80,33 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
   background-color: rgba(46, 8, 84, 0.08);
   transform: scale(1.1);
 }
+
+/* Print Media Styles for 1-Page Classic Invoice */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    font-size: 12px !important;
+  }
+  
+  header, footer, nav, aside, .print\:hidden, [class*="Navbar"], [class*="Footer"], [class*="PwaInstallBanner"] {
+    display: none !important;
+  }
+  
+  @page {
+    size: A4 portrait;
+    margin: 8mm 12mm 8mm 12mm;
+  }
+
+  .printable-invoice {
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    page-break-inside: avoid !important;
+  }
+}

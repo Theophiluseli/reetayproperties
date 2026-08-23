@@ -1,6 +1,18 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Bed, Car, Sparkles, User as UserIcon, LogOut, LayoutDashboard, ChevronDown } from 'lucide-react';
+import {
+  Bed,
+  Car,
+  Sparkles,
+  LogOut,
+  LayoutDashboard,
+  ChevronDown,
+  UserCheck,
+  Briefcase,
+  ShieldCheck,
+  ClipboardList,
+  Clock
+} from 'lucide-react';
 import { VerticalType, User } from '../../types';
 import { AuthModal } from '../auth/AuthModal';
 import { ReetayLogo } from '../common/ReetayLogo';
@@ -25,7 +37,11 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [showDropdown, setShowDropdown] = useState(false);
   const location = useLocation();
 
-  const isDashboard = location.pathname.startsWith('/dashboard');
+  const isDashboardRoute =
+    location.pathname.startsWith('/dashboard') ||
+    location.pathname.startsWith('/admin') ||
+    location.pathname.startsWith('/manager') ||
+    location.pathname.startsWith('/reception');
 
   const handleOpenAuth = (mode: 'login' | 'signup') => {
     setAuthMode(mode);
@@ -53,8 +69,8 @@ export const Navbar: React.FC<NavbarProps> = ({
               </Link>
             </div>
 
-            {/* Vertical Tabs (Dead-Centered in Viewport Header) */}
-            {!isDashboard && (
+            {/* Center Area: Public Vertical Tabs OR Dedicated Dashboard Title Badge */}
+            {!isDashboardRoute ? (
               <nav className="absolute left-1/2 -translate-x-1/2 hidden md:flex items-center bg-purple-50/70 p-1.5 rounded-full border border-purple-100/80 shadow-inner z-10">
                 <button
                   onClick={() => onVerticalChange && onVerticalChange('stays')}
@@ -90,11 +106,33 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <span>Experiences</span>
                 </button>
               </nav>
+            ) : (
+              <div className="absolute left-1/2 -translate-x-1/2 hidden md:flex items-center z-10">
+                {location.pathname.startsWith('/admin') && (
+                  <span className="px-4 py-2 rounded-full bg-[#2E0854] text-white text-xs font-extrabold uppercase tracking-wider flex items-center gap-2 shadow-sm border border-purple-800">
+                    <ShieldCheck className="w-4 h-4 text-amber-400" />
+                    <span>Executive Admin Console</span>
+                  </span>
+                )}
+
+                {location.pathname.startsWith('/manager') && (
+                  <span className="px-4 py-2 rounded-full bg-amber-950 text-amber-300 text-xs font-extrabold uppercase tracking-wider flex items-center gap-2 shadow-sm border border-amber-800">
+                    <Briefcase className="w-4 h-4 text-amber-400" />
+                    <span>Manager Console</span>
+                  </span>
+                )}
+                {location.pathname.startsWith('/dashboard') && (
+                  <span className="px-4 py-2 rounded-full bg-purple-100 text-[#2E0854] text-xs font-extrabold uppercase tracking-wider flex items-center gap-2 shadow-sm border border-purple-200">
+                    <LayoutDashboard className="w-4 h-4 text-purple-700" />
+                    <span>Guest Control Center</span>
+                  </span>
+                )}
+              </div>
             )}
 
-            {/* User Controls (Right) */}
+            {/* User Controls (Right) - Only show dropdown for Staff/Admin Accounts */}
             <div className="flex items-center gap-3 ml-auto">
-              {currentUser ? (
+              {currentUser && currentUser.role !== 'guest' ? (
                 <div className="relative">
                   <button
                     onClick={() => setShowDropdown(!showDropdown)}
@@ -111,96 +149,160 @@ export const Navbar: React.FC<NavbarProps> = ({
 
                   {/* Dropdown Menu */}
                   {showDropdown && (
-                    <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-gray-100 py-2 z-50 animate-in fade-in slide-in-from-top-2">
-                      <div className="px-4 py-3 border-b border-gray-100">
-                        <p className="text-xs text-gray-400 font-medium">Logged in as</p>
-                        <p className="text-sm font-bold text-navy-950 truncate">{currentUser.email}</p>
+                    <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-purple-100 py-2 z-50 animate-in fade-in slide-in-from-top-2">
+                      
+                      {/* Header with Role Badge */}
+                      <div className="px-4 py-3 border-b border-gray-100 bg-purple-50/40 rounded-t-2xl">
+                        <div className="flex items-center justify-between gap-1 mb-1">
+                          <p className="text-[10px] font-black uppercase text-gray-400">Account Role</p>
+                          {currentUser.role === 'receptionist' && (
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-black text-[9px] uppercase">
+                              Receptionist
+                            </span>
+                          )}
+                          {currentUser.role === 'manager' && (
+                            <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 font-black text-[9px] uppercase">
+                              Manager
+                            </span>
+                          )}
+                          {currentUser.role === 'admin' && (
+                            <span className="px-2 py-0.5 rounded-full bg-[#2E0854] text-white font-black text-[9px] uppercase">
+                              Executive Admin
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs font-bold text-navy-950 truncate">{currentUser.full_name}</p>
+                        <p className="text-[11px] text-gray-400 truncate">{currentUser.email}</p>
                       </div>
-                      <Link
-                        to="/dashboard"
-                        onClick={() => setShowDropdown(false)}
-                        className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gold-50 hover:text-gold-700 transition-colors"
-                      >
-                        <LayoutDashboard className="w-4 h-4 text-gold-600" />
-                        <span>User Dashboard</span>
-                      </Link>
 
-                      {(currentUser.role === 'receptionist' || currentUser.role === 'admin' || currentUser.role === 'manager') && (
-                        <Link
-                          to="/reception"
-                          onClick={() => setShowDropdown(false)}
-                          className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50 transition-colors"
-                        >
-                          <Sparkles className="w-4 h-4 text-emerald-500" />
-                          <span>Reception Desk</span>
-                        </Link>
+                      {/* Menu Options for RECEPTIONIST */}
+                      {currentUser.role === 'receptionist' && (
+                        <div className="py-1">
+                          <Link
+                            to="/reception"
+                            onClick={() => setShowDropdown(false)}
+                            className="flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50 transition-colors"
+                          >
+                            <UserCheck className="w-4 h-4 text-emerald-600" />
+                            <span>Reception Desk</span>
+                          </Link>
+                          <Link
+                            to="/reception"
+                            onClick={() => setShowDropdown(false)}
+                            className="flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+                          >
+                            <ClipboardList className="w-4 h-4 text-emerald-500" />
+                            <span>Check-ins & Guests</span>
+                          </Link>
+                          <button
+                            onClick={() => {
+                              setShowDropdown(false);
+                              window.dispatchEvent(new CustomEvent('open-shift-modal'));
+                            }}
+                            className="flex items-center gap-2.5 w-full text-left px-4 py-2 text-xs font-bold text-amber-700 hover:bg-amber-50 transition-colors border-t border-gray-100 mt-1 pt-2"
+                          >
+                            <Clock className="w-4 h-4 text-amber-600" />
+                            <span>End Shift & Handover Log</span>
+                          </button>
+                        </div>
                       )}
 
-                      {(currentUser.role === 'manager' || currentUser.role === 'admin') && (
-                        <Link
-                          to="/manager"
-                          onClick={() => setShowDropdown(false)}
-                          className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-navy-950 hover:bg-gold-50 transition-colors"
-                        >
-                          <Sparkles className="w-4 h-4 text-gold-500" />
-                          <span>Manager Console</span>
-                        </Link>
+                      {/* Menu Options for MANAGER */}
+                      {currentUser.role === 'manager' && (
+                        <div className="py-1">
+                          <Link
+                            to="/manager?tab=bookings"
+                            onClick={() => setShowDropdown(false)}
+                            className="flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-navy-950 hover:bg-gold-50 transition-colors"
+                          >
+                            <Briefcase className="w-4 h-4 text-gold-600" />
+                            <span>Manager Console</span>
+                          </Link>
+                          <Link
+                            to="/manager?tab=listings"
+                            onClick={() => setShowDropdown(false)}
+                            className="flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+                          >
+                            <Bed className="w-4 h-4 text-gold-500" />
+                            <span>Property & Vehicle Inventory</span>
+                          </Link>
+                          <button
+                            onClick={() => {
+                              setShowDropdown(false);
+                              window.dispatchEvent(new CustomEvent('open-shift-modal'));
+                            }}
+                            className="flex items-center gap-2.5 w-full text-left px-4 py-2 text-xs font-bold text-amber-700 hover:bg-amber-50 transition-colors border-t border-gray-100 mt-1 pt-2"
+                          >
+                            <Clock className="w-4 h-4 text-amber-600" />
+                            <span>End Shift & Handover Log</span>
+                          </button>
+                        </div>
                       )}
 
+                      {/* Menu Options for ADMIN */}
                       {currentUser.role === 'admin' && (
-                        <Link
-                          to="/admin"
-                          onClick={() => setShowDropdown(false)}
-                          className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gold-50 hover:text-gold-700 transition-colors"
-                        >
-                          <Sparkles className="w-4 h-4 text-amber-500" />
-                          <span>Admin Console</span>
-                        </Link>
+                        <div className="py-1">
+                          <Link
+                            to="/admin?tab=bookings"
+                            onClick={() => setShowDropdown(false)}
+                            className="flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-[#2E0854] hover:bg-purple-50 transition-colors"
+                          >
+                            <ShieldCheck className="w-4 h-4 text-purple-700" />
+                            <span>Executive Admin Console</span>
+                          </Link>
+                          <Link
+                            to="/admin?tab=staff"
+                            onClick={() => setShowDropdown(false)}
+                            className="flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+                          >
+                            <UserCheck className="w-4 h-4 text-emerald-600" />
+                            <span>Staff Accounts & Access</span>
+                          </Link>
+                          <Link
+                            to="/admin?tab=financials"
+                            onClick={() => setShowDropdown(false)}
+                            className="flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+                          >
+                            <Briefcase className="w-4 h-4 text-gold-600" />
+                            <span>Financial Audit & Revenue</span>
+                          </Link>
+                          <Link
+                            to="/admin?tab=listings"
+                            onClick={() => setShowDropdown(false)}
+                            className="flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+                          >
+                            <Bed className="w-4 h-4 text-blue-600" />
+                            <span>Property Inventory</span>
+                          </Link>
+                          <Link
+                            to="/admin?tab=incidents"
+                            onClick={() => setShowDropdown(false)}
+                            className="flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+                          >
+                            <ClipboardList className="w-4 h-4 text-rose-600" />
+                            <span>Guest Incident Reports</span>
+                          </Link>
+                        </div>
                       )}
-                      <Link
-                        to="/dashboard/bookings"
-                        onClick={() => setShowDropdown(false)}
-                        className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gold-50 hover:text-gold-700 transition-colors"
-                      >
-                        <Bed className="w-4 h-4 text-gold-600" />
-                        <span>My Bookings</span>
-                      </Link>
-                      <div className="border-t border-gray-100 my-1"></div>
-                      <button
-                        onClick={() => {
-                          setShowDropdown(false);
-                          onLogout();
-                        }}
-                        className="flex items-center gap-3 w-full px-4 py-2.5 text-sm font-semibold text-rose-600 hover:bg-rose-50 transition-colors"
-                      >
-                        <LogOut className="w-4 h-4" />
-                        <span>Log out</span>
-                      </button>
+
+                      {/* Logout */}
+                      <div className="border-t border-gray-100 pt-1 mt-1">
+                        <button
+                          onClick={() => {
+                            setShowDropdown(false);
+                            onLogout();
+                          }}
+                          className="flex items-center gap-2.5 w-full px-4 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 transition-colors"
+                        >
+                          <LogOut className="w-4 h-4" />
+                          <span>Log out</span>
+                        </button>
+                      </div>
+
                     </div>
                   )}
                 </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <Link
-                    to="/portal/login"
-                    className="hidden sm:inline-block px-3 py-2 text-xs font-extrabold text-navy-950 hover:text-gold-600 transition-colors"
-                  >
-                    Staff Portal
-                  </Link>
-                  <button
-                    onClick={() => handleOpenAuth('login')}
-                    className="px-4 py-2 text-sm font-bold text-navy-950 hover:text-gold-600 transition-colors"
-                  >
-                    Log in
-                  </button>
-                  <button
-                    onClick={() => handleOpenAuth('signup')}
-                    className="px-5 py-2.5 rounded-full text-sm font-bold text-white bg-navy-950 hover:bg-black shadow-md shadow-navy-950/20 active:scale-95 transition-all"
-                  >
-                    Sign up
-                  </button>
-                </div>
-              )}
+              ) : null}
             </div>
           </div>
         </div>
@@ -208,8 +310,8 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       <AuthModal
         isOpen={showAuthModal}
-        onClose={() => setShowAuthModal(false)}
         initialMode={authMode}
+        onClose={() => setShowAuthModal(false)}
         onSuccess={(user) => {
           onLoginSuccess(user);
           setShowAuthModal(false);
