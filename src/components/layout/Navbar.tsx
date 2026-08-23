@@ -11,7 +11,13 @@ import {
   Briefcase,
   ShieldCheck,
   ClipboardList,
-  Clock
+  Clock,
+  Menu,
+  X,
+  LogIn,
+  UserPlus,
+  User as UserIcon,
+  Shield
 } from 'lucide-react';
 import { VerticalType, User } from '../../types';
 import { AuthModal } from '../auth/AuthModal';
@@ -35,6 +41,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [showDropdown, setShowDropdown] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const location = useLocation();
 
   const isDashboardRoute =
@@ -46,6 +53,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const handleOpenAuth = (mode: 'login' | 'signup') => {
     setAuthMode(mode);
     setShowAuthModal(true);
+    setIsMobileMenuOpen(false);
   };
 
   const getInitials = (name: string) => {
@@ -64,7 +72,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="relative flex items-center justify-between h-20">
             {/* Reetay Official Logo (Left) */}
             <div className="flex items-center">
-              <Link to="/" className="group">
+              <Link to="/" className="group" onClick={() => setIsMobileMenuOpen(false)}>
                 <ReetayLogo size="md" />
               </Link>
             </div>
@@ -130,8 +138,31 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
             )}
 
-            {/* User Controls (Right) - Only show dropdown for Staff/Admin Accounts */}
+            {/* Right Controls: Desktop Auth Buttons + Staff Dropdown + Hamburger Toggle */}
             <div className="flex items-center gap-3 ml-auto">
+              
+              {/* Desktop Auth Buttons (When Logged Out or Guest) */}
+              {(!currentUser || currentUser.role === 'guest') && (
+                <div className="hidden sm:flex items-center gap-2.5">
+                  <button
+                    onClick={() => handleOpenAuth('login')}
+                    className="px-4 py-2 rounded-full text-xs font-extrabold text-[#2E0854] hover:bg-purple-50 border border-transparent hover:border-purple-200 transition-all flex items-center gap-1.5"
+                  >
+                    <LogIn className="w-3.5 h-3.5" />
+                    <span>Log in</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleOpenAuth('signup')}
+                    className="px-5 py-2.5 rounded-full text-xs font-extrabold text-white bg-[#2E0854] hover:bg-purple-900 shadow-sm hover:shadow-md active:scale-95 transition-all flex items-center gap-1.5"
+                  >
+                    <UserPlus className="w-3.5 h-3.5 text-amber-300" />
+                    <span>Sign up</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Staff / Admin User Dropdown */}
               {currentUser && currentUser.role !== 'guest' ? (
                 <div className="relative">
                   <button
@@ -147,11 +178,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                     <ChevronDown className="w-4 h-4 text-purple-400" />
                   </button>
 
-                  {/* Dropdown Menu */}
+                  {/* Staff Dropdown Menu */}
                   {showDropdown && (
                     <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-purple-100 py-2 z-50 animate-in fade-in slide-in-from-top-2">
-                      
-                      {/* Header with Role Badge */}
                       <div className="px-4 py-3 border-b border-gray-100 bg-purple-50/40 rounded-t-2xl">
                         <div className="flex items-center justify-between gap-1 mb-1">
                           <p className="text-[10px] font-black uppercase text-gray-400">Account Role</p>
@@ -175,7 +204,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                         <p className="text-[11px] text-gray-400 truncate">{currentUser.email}</p>
                       </div>
 
-                      {/* Menu Options for RECEPTIONIST */}
+                      {/* Options based on Role */}
                       {currentUser.role === 'receptionist' && (
                         <div className="py-1">
                           <Link
@@ -207,7 +236,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                         </div>
                       )}
 
-                      {/* Menu Options for MANAGER */}
                       {currentUser.role === 'manager' && (
                         <div className="py-1">
                           <Link
@@ -239,7 +267,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                         </div>
                       )}
 
-                      {/* Menu Options for ADMIN */}
                       {currentUser.role === 'admin' && (
                         <div className="py-1">
                           <Link
@@ -266,26 +293,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                             <Briefcase className="w-4 h-4 text-gold-600" />
                             <span>Financial Audit & Revenue</span>
                           </Link>
-                          <Link
-                            to="/admin?tab=listings"
-                            onClick={() => setShowDropdown(false)}
-                            className="flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
-                          >
-                            <Bed className="w-4 h-4 text-blue-600" />
-                            <span>Property Inventory</span>
-                          </Link>
-                          <Link
-                            to="/admin?tab=incidents"
-                            onClick={() => setShowDropdown(false)}
-                            className="flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
-                          >
-                            <ClipboardList className="w-4 h-4 text-rose-600" />
-                            <span>Guest Incident Reports</span>
-                          </Link>
                         </div>
                       )}
 
-                      {/* Logout */}
                       <div className="border-t border-gray-100 pt-1 mt-1">
                         <button
                           onClick={() => {
@@ -298,14 +308,148 @@ export const Navbar: React.FC<NavbarProps> = ({
                           <span>Log out</span>
                         </button>
                       </div>
-
                     </div>
                   )}
                 </div>
               ) : null}
+
+              {/* Hamburger Menu Toggle Button */}
+              <button
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                aria-label="Toggle Navigation Menu"
+                className="flex items-center justify-center p-2.5 rounded-full border border-purple-200 bg-purple-50/50 hover:bg-purple-100 text-[#2E0854] transition-all hover:scale-105 active:scale-95 shadow-sm"
+              >
+                {isMobileMenuOpen ? (
+                  <X className="w-5 h-5 text-[#2E0854]" />
+                ) : (
+                  <Menu className="w-5 h-5 text-[#2E0854]" />
+                )}
+              </button>
+
             </div>
           </div>
         </div>
+
+        {/* Hamburger Slide-Down Menu Drawer */}
+        {isMobileMenuOpen && (
+          <div className="border-t border-purple-100 bg-white/98 backdrop-blur-xl shadow-2xl animate-in slide-in-from-top duration-200">
+            <div className="max-w-7xl mx-auto px-4 py-5 space-y-4">
+              
+              {/* Category Selector (Stays, Cars, Experiences) */}
+              {!isDashboardRoute && (
+                <div className="bg-purple-50/80 p-1.5 rounded-2xl border border-purple-100 flex items-center justify-between gap-1">
+                  <button
+                    onClick={() => {
+                      onVerticalChange && onVerticalChange('stays');
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-extrabold transition-all ${
+                      activeVertical === 'stays'
+                        ? 'bg-[#2E0854] text-white shadow-md'
+                        : 'text-purple-900 hover:bg-white/60'
+                    }`}
+                  >
+                    <Bed className="w-4 h-4" />
+                    <span>Stays</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      onVerticalChange && onVerticalChange('cars');
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-extrabold transition-all ${
+                      activeVertical === 'cars'
+                        ? 'bg-[#2E0854] text-white shadow-md'
+                        : 'text-purple-900 hover:bg-white/60'
+                    }`}
+                  >
+                    <Car className="w-4 h-4" />
+                    <span>Cars</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      onVerticalChange && onVerticalChange('experiences');
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-extrabold transition-all ${
+                      activeVertical === 'experiences'
+                        ? 'bg-[#2E0854] text-white shadow-md'
+                        : 'text-purple-900 hover:bg-white/60'
+                    }`}
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    <span>Experiences</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Log In & Sign Up Action Cards */}
+              {(!currentUser || currentUser.role === 'guest') ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <button
+                    onClick={() => handleOpenAuth('login')}
+                    className="flex items-center justify-center gap-3 p-3.5 rounded-2xl border-2 border-purple-200 bg-white hover:bg-purple-50 text-[#2E0854] font-black text-sm transition-all shadow-sm group"
+                  >
+                    <LogIn className="w-5 h-5 text-purple-600 group-hover:scale-110 transition-transform" />
+                    <span>Log In to Account</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleOpenAuth('signup')}
+                    className="flex items-center justify-center gap-3 p-3.5 rounded-2xl bg-[#2E0854] hover:bg-purple-900 text-white font-black text-sm transition-all shadow-md active:scale-98 group"
+                  >
+                    <UserPlus className="w-5 h-5 text-amber-300 group-hover:scale-110 transition-transform" />
+                    <span>Create New Account</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="p-4 rounded-2xl bg-purple-50/70 border border-purple-100 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-[#2E0854] text-white font-black text-sm flex items-center justify-center">
+                      {getInitials(currentUser.full_name)}
+                    </div>
+                    <div>
+                      <p className="text-xs font-black text-[#2E0854]">{currentUser.full_name}</p>
+                      <p className="text-[11px] text-gray-500 font-medium">{currentUser.email}</p>
+                    </div>
+                  </div>
+
+                  <Link
+                    to="/dashboard"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="px-3.5 py-2 rounded-xl bg-[#2E0854] text-white font-black text-xs hover:bg-purple-900 transition-all flex items-center gap-1.5"
+                  >
+                    <LayoutDashboard className="w-3.5 h-3.5" />
+                    <span>Dashboard</span>
+                  </Link>
+                </div>
+              )}
+
+              {/* Auxiliary Quick Links (Staff Portal, Concierge Support) */}
+              <div className="border-t border-purple-100 pt-3 flex flex-wrap items-center justify-between gap-3 text-xs font-bold text-gray-600">
+                <Link
+                  to="/staff/login"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="flex items-center gap-1.5 text-purple-900 hover:text-[#2E0854] transition-colors"
+                >
+                  <Shield className="w-4 h-4 text-purple-600" />
+                  <span>Staff & Executive Portal</span>
+                </Link>
+
+                <Link
+                  to="/dashboard/support"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="text-gray-500 hover:text-[#2E0854] transition-colors"
+                >
+                  24/7 Concierge Support
+                </Link>
+              </div>
+
+            </div>
+          </div>
+        )}
       </header>
 
       <AuthModal

@@ -97,46 +97,59 @@ export const notificationService = {
     // 2. Real-time Email Dispatch: Resend API (Direct or via Edge Function)
     const resendApiKey = import.meta.env.VITE_RESEND_API_KEY;
     const fromEmail = import.meta.env.VITE_FROM_EMAIL || 'Reetay Concierge <onboarding@resend.dev>';
+    const testOwnerEmail = import.meta.env.VITE_TEST_OWNER_EMAIL || 'reetaypropertiess@gmail.com';
 
     if (resendApiKey) {
       try {
-        const response = await fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${resendApiKey}`
-          },
-          body: JSON.stringify({
-            from: fromEmail,
-            to: allRecipients,
-            subject: subject,
-            text: emailBody,
-            html: `
-              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 16px; background-color: #ffffff;">
-                <div style="background-color: #2E0854; padding: 24px; text-align: center; border-radius: 12px 12px 0 0;">
-                  <h1 style="color: #ffffff; margin: 0; font-size: 22px; font-weight: 900; letter-spacing: 0.5px;">REETAY PROPERTIES & LUXURY SUITES</h1>
-                  <p style="color: #d8b4fe; margin: 4px 0 0 0; font-size: 12px;">Airport Residential Area, Accra, Ghana</p>
-                </div>
-                <div style="padding: 24px; background-color: #ffffff;">
-                  <h2 style="color: #2E0854; font-size: 18px; font-weight: 800; margin-top: 0;">${subject}</h2>
-                  <div style="background-color: #f8fafc; padding: 16px; border-radius: 12px; border-left: 4px solid #c084fc; margin: 16px 0;">
-                    <pre style="font-family: Arial, sans-serif; font-size: 14px; color: #1e293b; white-space: pre-wrap; margin: 0;">${emailBody}</pre>
+        const sendEmail = async (targetRecipients: string[]) => {
+          return await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${resendApiKey}`
+            },
+            body: JSON.stringify({
+              from: fromEmail,
+              to: targetRecipients,
+              subject: subject,
+              text: emailBody,
+              html: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 16px; background-color: #ffffff;">
+                  <div style="background-color: #2E0854; padding: 24px; text-align: center; border-radius: 12px 12px 0 0;">
+                    <h1 style="color: #ffffff; margin: 0; font-size: 22px; font-weight: 900; letter-spacing: 0.5px;">REETAY PROPERTIES & LUXURY SUITES</h1>
+                    <p style="color: #d8b4fe; margin: 4px 0 0 0; font-size: 12px;">Airport Residential Area, Accra, Ghana</p>
+                  </div>
+                  <div style="padding: 24px; background-color: #ffffff;">
+                    <h2 style="color: #2E0854; font-size: 18px; font-weight: 800; margin-top: 0;">${subject}</h2>
+                    <div style="background-color: #f8fafc; padding: 16px; border-radius: 12px; border-left: 4px solid #c084fc; margin: 16px 0;">
+                      <pre style="font-family: Arial, sans-serif; font-size: 14px; color: #1e293b; white-space: pre-wrap; margin: 0;">${emailBody}</pre>
+                    </div>
+                  </div>
+                  <div style="background-color: #f1f5f9; padding: 16px; text-align: center; border-radius: 0 0 12px 12px; font-size: 11px; color: #64748b;">
+                    Tel: +233 24 123 4567 | Email: concierge@reetay.com<br/>
+                    © 2026 Reetay Apartments & Luxury Suites. All rights reserved.
                   </div>
                 </div>
-                <div style="background-color: #f1f5f9; padding: 16px; text-align: center; border-radius: 0 0 12px 12px; font-size: 11px; color: #64748b;">
-                  Tel: +233 24 123 4567 | Email: concierge@reetay.com<br/>
-                  © 2026 Reetay Apartments & Luxury Suites. All rights reserved.
-                </div>
-              </div>
-            `
-          })
-        });
+              `
+            })
+          });
+        };
+
+        let response = await sendEmail(allRecipients);
+
+        if (!response.ok) {
+          const errData = await response.json();
+          console.warn('[RESEND API WARNING]', errData);
+
+          // If blocked due to Resend testing domain restriction (only allowed to send to owner email)
+          if (errData?.statusCode === 403 || errData?.message?.includes('testing emails')) {
+            console.log(`[RESEND TEST FALLBACK] Redirecting notification to account owner (${testOwnerEmail})...`);
+            response = await sendEmail([testOwnerEmail]);
+          }
+        }
 
         if (response.ok) {
-          console.log('[RESEND API SUCCESS] Real-time email delivered to:', allRecipients);
-        } else {
-          const errData = await response.json();
-          console.error('[RESEND API ERROR]', errData);
+          console.log('[RESEND API SUCCESS] Real-time email delivered successfully!');
         }
       } catch (err) {
         console.error('[RESEND DISPATCH ERROR]', err);
