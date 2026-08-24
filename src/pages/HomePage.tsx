@@ -37,17 +37,22 @@ export const HomePage: React.FC<HomePageProps> = ({ activeVertical, onVerticalCh
 
   const loadProperties = async () => {
     setLoading(true);
-    let data = await dataService.getProperties(
-      activeVertical,
-      filters.destination
-    );
-    if (filters.selectedAmenities.length > 0) {
-      data = data.filter(p =>
-        filters.selectedAmenities.every(a => p.amenities.includes(a))
+    try {
+      let data = await dataService.getProperties(
+        activeVertical,
+        filters.destination
       );
+      if (filters.selectedAmenities.length > 0) {
+        data = data.filter(p =>
+          filters.selectedAmenities.every(a => p.amenities.includes(a))
+        );
+      }
+      setProperties(data);
+    } catch (err) {
+      console.error('Failed to load listings:', err);
+    } finally {
+      setLoading(false);
     }
-    setProperties(data);
-    setLoading(false);
   };
 
   const handleSearch = (newFilters: Partial<FilterState>) => {

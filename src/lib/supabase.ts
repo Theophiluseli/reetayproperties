@@ -144,6 +144,16 @@ export const mapRowToProperty = (row: any): Property => {
   };
 };
 
+// Helper to prevent infinite loading spinners on slow/failing network calls
+const withTimeout = <T>(promise: PromiseLike<T>, timeoutMs = 2500): Promise<T> => {
+  return Promise.race([
+    Promise.resolve(promise),
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error('Supabase request timed out')), timeoutMs)
+    )
+  ]);
+};
+
 export const dataService = {
   // Authentication
   async getCurrentUser(): Promise<User | null> {
@@ -497,12 +507,12 @@ export const dataService = {
         if (query) {
           req = req.or(`title.ilike.%${query}%,description.ilike.%${query}%`);
         }
-        const { data, error } = await req;
+        const { data, error } = await withTimeout(req, 2500);
         if (!error && data && data.length > 0) {
           return data.map(mapRowToProperty);
         }
       } catch (err) {
-        console.error('Failed to load properties from Supabase:', err);
+        console.warn('Supabase fetch timed out or failed, serving instant local listings fallback:', err);
       }
     }
 
@@ -525,10 +535,13 @@ export const dataService = {
   async getPropertyById(id: string): Promise<Property | null> {
     if (isSupabaseConfigured) {
       try {
-        const { data, error } = await supabase.from('properties').select('*').eq('id', id).single();
+        const { data, error } = await withTimeout(
+          supabase.from('properties').select('*').eq('id', id).single(),
+          2500
+        );
         if (!error && data) return mapRowToProperty(data);
       } catch (err) {
-        console.error('Failed to load property from Supabase:', err);
+        console.warn('Supabase getPropertyById timed out or failed, using local property fallback:', err);
       }
     }
     return localProperties.find(p => p.id === id) || null;
@@ -538,7 +551,10 @@ export const dataService = {
   async getBookings(): Promise<Booking[]> {
     if (isSupabaseConfigured) {
       try {
-        const { data, error } = await supabase.from('bookings').select('*, property:properties(*)');
+        const { data, error } = await withTimeout(
+          supabase.from('bookings').select('*, property:properties(*)'),
+          2500
+        );
         if (!error && data && data.length > 0) {
           return data.map((b: any) => ({
             ...b,
@@ -546,7 +562,7 @@ export const dataService = {
           }));
         }
       } catch (err) {
-        console.error('Failed to load bookings from Supabase:', err);
+        console.warn('Supabase getBookings timed out or failed, using local bookings fallback:', err);
       }
     }
     return localBookings;
