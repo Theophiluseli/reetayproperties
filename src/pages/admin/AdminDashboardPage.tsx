@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { dataService } from '../../lib/supabase';
-import { Property, Booking, User, VerticalType, StaffAccount, IncidentReport } from '../../types';
+import { dataService, DEFAULT_RECEPTIONIST_PERMISSIONS, DEFAULT_MANAGER_PERMISSIONS, DEFAULT_ADMIN_PERMISSIONS } from '../../lib/supabase';
+import { useRealtimeSync } from '../../lib/realtimeSync';
+import { Property, Booking, User, VerticalType, StaffAccount, IncidentReport, StaffPermissions, DatabaseHealthInfo } from '../../types';
 import { IncomingReservationsDesk } from '../../components/dashboard/IncomingReservationsDesk';
 import {
   ShieldCheck,
@@ -35,7 +36,19 @@ import {
   TrendingUp,
   Search,
   AlertTriangle,
-  FileWarning
+  FileWarning,
+  Briefcase,
+  Copy,
+  Eye,
+  EyeOff,
+  Settings,
+  Database,
+  RefreshCw,
+  Sliders,
+  ShieldAlert,
+  Server,
+  HardDrive,
+  Shield
 } from 'lucide-react';
 import { Link, Navigate, useSearchParams } from 'react-router-dom';
 
@@ -53,12 +66,16 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ adminUse
   const [properties, setProperties] = useState<Property[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [activeTab, setActiveTab] = useState<'bookings' | 'listings' | 'staff' | 'clients' | 'financials' | 'incidents'>(
-    (tabParam as any) || 'bookings'
+    (tabParam === 'settings' ? 'staff' : tabParam as any) || 'bookings'
   );
 
   useEffect(() => {
-    if (tabParam && ['bookings', 'listings', 'staff', 'clients', 'financials', 'incidents'].includes(tabParam)) {
-      setActiveTab(tabParam as any);
+    if (tabParam) {
+      if (tabParam === 'settings') {
+        setActiveTab('staff');
+      } else if (['bookings', 'listings', 'staff', 'clients', 'financials', 'incidents'].includes(tabParam)) {
+        setActiveTab(tabParam as any);
+      }
     }
   }, [tabParam]);
   const [selectedVertical, setSelectedVertical] = useState<VerticalType>('stays');
@@ -80,6 +97,28 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ adminUse
   const [staffRole, setStaffRole] = useState<'receptionist' | 'manager' | 'admin'>('receptionist');
   const [staffNotification, setStaffNotification] = useState('');
   const [staffErrorMsg, setStaffErrorMsg] = useState('');
+  const [staffRoleFilter, setStaffRoleFilter] = useState<'all' | 'receptionist' | 'manager' | 'admin'>('all');
+  const [staffSearchQuery, setStaffSearchQuery] = useState('');
+  const [showStaffPassword, setShowStaffPassword] = useState(false);
+  const [copiedStaffId, setCopiedStaffId] = useState<string | null>(null);
+  const [createdStaffSummary, setCreatedStaffSummary] = useState<{
+    name: string;
+    email: string;
+    role: string;
+    pass: string;
+  } | null>(null);
+
+  // Admin Settings & DB Center State
+  const [dbHealth, setDbHealth] = useState<DatabaseHealthInfo | null>(null);
+  const [isRefreshingDb, setIsRefreshingDb] = useState(false);
+  const [passwordResetTarget, setPasswordResetTarget] = useState<StaffAccount | null>(null);
+  const [resetPasswordValue, setResetPasswordValue] = useState('');
+  const [showResetPasswordModal, setShowResetPasswordModal] = useState(false);
+  const [showResetPasswordPlain, setShowResetPasswordPlain] = useState(false);
+  const [permissionsEditTarget, setPermissionsEditTarget] = useState<StaffAccount | null>(null);
+  const [editablePermissions, setEditablePermissions] = useState<StaffPermissions>(DEFAULT_RECEPTIONIST_PERMISSIONS);
+  const [showPermissionsModal, setShowPermissionsModal] = useState(false);
+  const [dbExportMessage, setDbExportMessage] = useState('');
 
   // Feature Access Configuration State
   const [staffPermWalkin, setStaffPermWalkin] = useState(true);
@@ -134,6 +173,10 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ adminUse
   const [walkInPaymentStatus, setWalkInPaymentStatus] = useState<'paid' | 'pending'>('paid');
   const [walkInError, setWalkInError] = useState('');
 
+  useRealtimeSync(['properties', 'bookings', 'users', 'incident_reports', 'shift_handovers'], () => {
+    loadAdminData();
+  });
+
   useEffect(() => {
     loadAdminData();
   }, []);
@@ -145,14 +188,117 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ adminUse
     const b = await dataService.getBookings();
     const st = await dataService.getStaffAccounts();
     const inc = await dataService.getIncidentReports();
+    const health = await dataService.getDatabaseHealth();
     const allProps = [...p, ...c, ...e];
     setProperties(allProps);
     setBookings(b);
     setStaffAccounts(st);
     setIncidentReports(inc);
+    setDbHealth(health);
     if (allProps.length > 0 && !selectedPropertyId) {
       setSelectedPropertyId(allProps[0].id);
     }
+  };
+
+  const handleRefreshDbHealth = async () => {
+    setIsRefreshingDb(true);
+    const health = await dataService.getDatabaseHealth();
+    setDbHealth(health);
+    setIsRefreshingDb(false);
+    setStaffNotification('Database connection health verified.');
+    setTimeout(() => setStaffNotification(''), 3000);
+  };
+
+  const handleOpenResetPassword = (staff: StaffAccount) => {
+    setPasswordResetTarget(staff);
+    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+    const generated = staff.role === 'manager' ? `Mgr#${randomSuffix}` : `Staff#${randomSuffix}`;
+    setResetPasswordValue(generated);
+    setShowResetPasswordPlain(true);
+    setShowResetPasswordModal(true);
+  };
+
+  const handleConfirmResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!passwordResetTarget || !resetPasswordValue.trim()) return;
+    try {
+      await dataService.resetStaffPassword(passwordResetTarget.id, resetPasswordValue.trim());
+      setStaffNotification(`Successfully updated password for ${passwordResetTarget.full_name}!`);
+      setCreatedStaffSummary({
+        name: passwordResetTarget.full_name,
+        email: passwordResetTarget.email,
+        role: passwordResetTarget.role,
+        pass: resetPasswordValue.trim()
+      });
+      setShowResetPasswordModal(false);
+      loadAdminData();
+      setTimeout(() => setStaffNotification(''), 4000);
+    } catch (err: any) {
+      alert(err.message || 'Failed to reset password');
+    }
+  };
+
+  const handleOpenEditPermissions = (staff: StaffAccount) => {
+    setPermissionsEditTarget(staff);
+    const defaultPerms = staff.role === 'manager'
+      ? DEFAULT_MANAGER_PERMISSIONS
+      : staff.role === 'admin'
+        ? DEFAULT_ADMIN_PERMISSIONS
+        : DEFAULT_RECEPTIONIST_PERMISSIONS;
+    setEditablePermissions(staff.permissions ? { ...defaultPerms, ...staff.permissions } : { ...defaultPerms });
+    setShowPermissionsModal(true);
+  };
+
+  const handleSavePermissions = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!permissionsEditTarget) return;
+    try {
+      await dataService.updateStaffPermissions(permissionsEditTarget.id, editablePermissions);
+      setStaffNotification(`Updated access control permissions for ${permissionsEditTarget.full_name}!`);
+      setShowPermissionsModal(false);
+      loadAdminData();
+      setTimeout(() => setStaffNotification(''), 4000);
+    } catch (err: any) {
+      alert(err.message || 'Failed to update permissions');
+    }
+  };
+
+  const handleToggleStaffStatus = async (staff: StaffAccount) => {
+    try {
+      const updated = await dataService.toggleStaffStatus(staff.id);
+      setStaffNotification(`Account for ${staff.full_name} is now ${updated.status.toUpperCase()}.`);
+      loadAdminData();
+      setTimeout(() => setStaffNotification(''), 4000);
+    } catch (err: any) {
+      alert(err.message || 'Failed to update account status');
+    }
+  };
+
+  const handleExportDatabaseBackup = () => {
+    const backupData = {
+      system: 'Reetay Apartments Management System',
+      environment: 'Production RBAC Data Store',
+      exported_at: new Date().toISOString(),
+      database_engine: 'PostgreSQL 15 via Supabase + Local Hybrid Storage',
+      staff_accounts_count: staffAccounts.length,
+      staff_accounts: staffAccounts,
+      bookings_count: bookings.length,
+      bookings: bookings,
+      properties_count: properties.length,
+      properties: properties,
+      incident_reports_count: incidentReports.length,
+      incident_reports: incidentReports
+    };
+    const jsonStr = JSON.stringify(backupData, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `reetay_database_backup_${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setDbExportMessage('Full database snapshot exported successfully as JSON backup.');
+    setTimeout(() => setDbExportMessage(''), 5000);
   };
 
   const handleResolveIncidentReport = async (reportId: string) => {
@@ -185,6 +331,32 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ adminUse
     }
   };
 
+  const handleGeneratePassword = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = '';
+    for (let i = 0; i < 4; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    const generated = `Staff#${code}`;
+    setStaffPassword(generated);
+  };
+
+  const handleCopyCredentials = (staff: StaffAccount) => {
+    const text = `Reetay Apartments Staff Credentials:
+Portal URL: ${window.location.origin}/admin/login
+Role: ${staff.role.toUpperCase()}
+Name: ${staff.full_name}
+Email: ${staff.email}
+Password: ${staff.password || 'staff123'}`;
+    navigator.clipboard.writeText(text);
+    setCopiedStaffId(staff.id);
+    setStaffNotification(`Copied login credentials for ${staff.full_name} to clipboard!`);
+    setTimeout(() => {
+      setCopiedStaffId(null);
+      setStaffNotification('');
+    }, 4000);
+  };
+
   const handleOpenAddStaffModal = () => {
     setEditingStaff(null);
     setStaffFullName('');
@@ -193,6 +365,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ adminUse
     setStaffPhone('');
     setStaffRole('receptionist');
     setStaffErrorMsg('');
+    setShowStaffPassword(false);
     setStaffPermWalkin(true);
     setStaffPermCheckout(true);
     setStaffPermStatus(true);
@@ -209,6 +382,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ adminUse
     setStaffPhone(staff.phone || '');
     setStaffRole(staff.role);
     setStaffErrorMsg('');
+    setShowStaffPassword(false);
     const p = staff.permissions || {
       can_register_walkins: true,
       can_checkout_guests: true,
@@ -228,7 +402,14 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ adminUse
   const handleSaveStaffAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     setStaffErrorMsg('');
-    const permissions = {
+    const basePerms = staffRole === 'manager' 
+      ? DEFAULT_MANAGER_PERMISSIONS 
+      : staffRole === 'admin'
+        ? DEFAULT_ADMIN_PERMISSIONS
+        : DEFAULT_RECEPTIONIST_PERMISSIONS;
+
+    const permissions: StaffPermissions = {
+      ...basePerms,
       can_register_walkins: staffPermWalkin,
       can_checkout_guests: staffPermCheckout,
       can_edit_booking_status: staffPermStatus,
@@ -246,7 +427,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ adminUse
           password: staffPassword,
           permissions
         });
-        setStaffNotification(`Updated staff account and feature permissions for ${staffFullName}.`);
+        setStaffNotification(`Updated staff account and permissions for ${staffFullName}.`);
       } else {
         await dataService.createStaffAccount({
           full_name: staffFullName,
@@ -256,7 +437,14 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ adminUse
           phone: staffPhone,
           permissions
         });
-        setStaffNotification(`Created ${staffRole.toUpperCase()} account for ${staffFullName} with customized feature permissions!`);
+        setCreatedStaffSummary({
+          name: staffFullName,
+          email: staffEmail,
+          role: staffRole,
+          pass: staffPassword
+        });
+        setActiveTab('staff');
+        setStaffNotification(`Successfully registered ${staffRole.toUpperCase()} account for ${staffFullName}!`);
       }
       setShowStaffModal(false);
       loadAdminData();
@@ -639,15 +827,22 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ adminUse
 
         <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
           <button
+            onClick={handleOpenAddStaffModal}
+            className="flex-1 sm:flex-none px-4 sm:px-5 py-2.5 sm:py-3 rounded-full bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer border border-purple-500/50"
+          >
+            <UserPlus className="w-4 h-4 text-amber-300" />
+            <span>Register Staff Account</span>
+          </button>
+          <button
             onClick={() => setShowWalkInModal(true)}
-            className="flex-1 sm:flex-none px-4 sm:px-5 py-2.5 sm:py-3 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold text-xs shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all"
+            className="flex-1 sm:flex-none px-4 sm:px-5 py-2.5 sm:py-3 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold text-xs shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer"
           >
             <UserCheck className="w-4 h-4" />
             <span>Record Walk-in Booking</span>
           </button>
           <button
             onClick={handleOpenAddModal}
-            className="flex-1 sm:flex-none px-4 sm:px-5 py-2.5 sm:py-3 rounded-full bg-gradient-to-r from-gold-400 via-amber-500 to-gold-500 text-navy-950 font-black text-xs shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all"
+            className="flex-1 sm:flex-none px-4 sm:px-5 py-2.5 sm:py-3 rounded-full bg-gradient-to-r from-gold-400 via-amber-500 to-gold-500 text-navy-950 font-black text-xs shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer"
           >
             <Plus className="w-4 h-4 stroke-[3]" />
             <span>Add Listing</span>
@@ -798,7 +993,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ adminUse
           }`}
         >
           <Users className="w-3.5 h-3.5" />
-          <span>Staff & Personnel ({staffAccounts.length})</span>
+          <span>Staff & Access Control ({staffAccounts.length})</span>
         </button>
 
         <button
@@ -953,90 +1148,334 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ adminUse
 
       {/* Tab 3: Staff Accounts & Personnel Management */}
       {activeTab === 'staff' && (
-        <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden space-y-4">
-          <div className="p-6 border-b border-gray-100 flex items-center justify-between">
-            <div>
-              <h3 className="text-base font-black text-navy-950">Staff Accounts & Operations Personnel</h3>
-              <p className="text-xs text-gray-500">Create & manage login credentials for Receptionists, Managers, and Admins</p>
+        <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden space-y-5 p-5 sm:p-6">
+          
+          {/* Newly Created Staff Account Credentials Alert Banner */}
+          {createdStaffSummary && (
+            <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border-2 border-emerald-300 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm animate-in fade-in">
+              <div className="space-y-1">
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-black uppercase">
+                  <CheckCircle className="w-3.5 h-3.5" />
+                  <span>Account Registered Successfully</span>
+                </div>
+                <h4 className="text-sm font-black text-emerald-950">
+                  {createdStaffSummary.name} is now registered as {createdStaffSummary.role.toUpperCase()}
+                </h4>
+                <p className="text-xs font-mono text-emerald-900">
+                  Email: <span className="font-bold">{createdStaffSummary.email}</span> | Password: <span className="font-bold">{createdStaffSummary.pass}</span>
+                </p>
+                <p className="text-[11px] text-emerald-700">
+                  Staff member can log in directly at <span className="font-bold underline">{window.location.origin}/admin/login</span>
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => {
+                    const text = `Reetay Apartments Staff Account:\nPortal URL: ${window.location.origin}/admin/login\nRole: ${createdStaffSummary.role.toUpperCase()}\nEmail: ${createdStaffSummary.email}\nPassword: ${createdStaffSummary.pass}`;
+                    navigator.clipboard.writeText(text);
+                    setStaffNotification(`Copied credentials for ${createdStaffSummary.name}!`);
+                    setTimeout(() => setStaffNotification(''), 3000);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>Copy Credentials</span>
+                </button>
+                <button
+                  onClick={() => setCreatedStaffSummary(null)}
+                  className="p-1.5 rounded-xl hover:bg-emerald-200 text-emerald-800 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
+          )}
+
+          {/* Header & Quick Action */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-100 pb-5">
+            <div>
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-50 text-[#2E0854] text-xs font-black uppercase mb-1">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>Personnel & Access Control</span>
+              </div>
+              <h3 className="text-xl font-black text-navy-950">Staff Accounts & Access Control</h3>
+              <p className="text-xs text-gray-500 font-medium">
+                Register staff accounts, create and reset passwords, configure granular access control (RBAC), and manage operations personnel.
+              </p>
+            </div>
+            
             <button
               onClick={handleOpenAddStaffModal}
-              className="px-4 py-2 bg-navy-950 text-white rounded-full text-xs font-bold hover:bg-navy-900 flex items-center gap-1.5 shadow-md active:scale-95 transition-all"
+              className="px-5 py-2.5 bg-gradient-to-r from-purple-700 to-[#2E0854] hover:brightness-110 text-white rounded-full text-xs font-black flex items-center justify-center gap-2 shadow-md active:scale-95 transition-all shrink-0 cursor-pointer"
             >
-              <UserPlus className="w-3.5 h-3.5" />
-              <span>Create Staff Account</span>
+              <UserPlus className="w-4 h-4 text-amber-300" />
+              <span>Register New Staff Account</span>
             </button>
           </div>
 
-          <div className="overflow-x-auto">
+          {/* Role Summary Stats */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="bg-gray-50 border border-gray-200/80 rounded-2xl p-3.5">
+              <span className="text-[10px] font-extrabold uppercase text-gray-400 block">Total Staff</span>
+              <span className="text-2xl font-black text-navy-950 mt-1 block">{staffAccounts.length}</span>
+              <span className="text-[10px] text-gray-500 font-semibold">Active accounts</span>
+            </div>
+
+            <div className="bg-amber-50/60 border border-amber-200/60 rounded-2xl p-3.5">
+              <span className="text-[10px] font-extrabold uppercase text-amber-800 block">Managers</span>
+              <span className="text-2xl font-black text-amber-950 mt-1 block">
+                {staffAccounts.filter(s => s.role === 'manager').length}
+              </span>
+              <span className="text-[10px] text-amber-700 font-semibold">Console oversight</span>
+            </div>
+
+            <div className="bg-emerald-50/60 border border-emerald-200/60 rounded-2xl p-3.5">
+              <span className="text-[10px] font-extrabold uppercase text-emerald-800 block">Receptionists</span>
+              <span className="text-2xl font-black text-emerald-950 mt-1 block">
+                {staffAccounts.filter(s => s.role === 'receptionist').length}
+              </span>
+              <span className="text-[10px] text-emerald-700 font-semibold">Front desk operations</span>
+            </div>
+
+            <div className="bg-purple-50/60 border border-purple-200/60 rounded-2xl p-3.5">
+              <span className="text-[10px] font-extrabold uppercase text-purple-800 block">System Admins</span>
+              <span className="text-2xl font-black text-[#2E0854] mt-1 block">
+                {staffAccounts.filter(s => s.role === 'admin').length}
+              </span>
+              <span className="text-[10px] text-purple-700 font-semibold">Full access</span>
+            </div>
+          </div>
+
+          {/* Search & Filter Controls */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
+            {/* Role Filter Tabs */}
+            <div className="flex items-center bg-gray-100 p-1 rounded-2xl gap-1">
+              <button
+                type="button"
+                onClick={() => setStaffRoleFilter('all')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all ${
+                  staffRoleFilter === 'all' ? 'bg-white text-navy-950 shadow-sm' : 'text-gray-500 hover:text-navy-950'
+                }`}
+              >
+                All Staff ({staffAccounts.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setStaffRoleFilter('manager')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all ${
+                  staffRoleFilter === 'manager' ? 'bg-amber-100 text-amber-900 shadow-sm' : 'text-gray-500 hover:text-navy-950'
+                }`}
+              >
+                Managers ({staffAccounts.filter(s => s.role === 'manager').length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setStaffRoleFilter('receptionist')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all ${
+                  staffRoleFilter === 'receptionist' ? 'bg-emerald-100 text-emerald-900 shadow-sm' : 'text-gray-500 hover:text-navy-950'
+                }`}
+              >
+                Receptionists ({staffAccounts.filter(s => s.role === 'receptionist').length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setStaffRoleFilter('admin')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all ${
+                  staffRoleFilter === 'admin' ? 'bg-purple-100 text-[#2E0854] shadow-sm' : 'text-gray-500 hover:text-navy-950'
+                }`}
+              >
+                Admins ({staffAccounts.filter(s => s.role === 'admin').length})
+              </button>
+            </div>
+
+            {/* Search Input */}
+            <div className="relative max-w-xs w-full">
+              <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Search staff by name or email..."
+                value={staffSearchQuery}
+                onChange={(e) => setStaffSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-full text-xs font-semibold text-navy-950 outline-none focus:bg-white focus:border-purple-600 transition-all"
+              />
+            </div>
+          </div>
+
+          {/* Staff Table */}
+          <div className="overflow-x-auto border border-gray-100 rounded-2xl">
             <table className="w-full text-left text-xs min-w-[750px]">
               <thead className="bg-gray-50 text-gray-400 uppercase font-black border-b border-gray-100">
                 <tr>
                   <th className="p-4">Staff Member</th>
-                  <th className="p-4">Email Address</th>
-                  <th className="p-4">Phone Number</th>
+                  <th className="p-4">Email & Contact</th>
                   <th className="p-4">Assigned Role</th>
                   <th className="p-4">Account Status</th>
-                  <th className="p-4">Created Date</th>
-                  <th className="p-4 text-right">Management</th>
+                  <th className="p-4">Access Permissions (RBAC)</th>
+                  <th className="p-4 text-right">Security & Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 font-semibold text-navy-950">
-                {staffAccounts.map((s) => (
-                  <tr key={s.id} className="hover:bg-gray-50/50">
-                    <td className="p-4 flex items-center gap-3">
-                      <img
-                        src={s.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80'}
-                        alt={s.full_name}
-                        className="w-9 h-9 rounded-full object-cover border border-gray-200"
-                      />
-                      <div>
-                        <p className="font-extrabold text-navy-950">{s.full_name}</p>
-                        <p className="text-[10px] text-gray-400 font-mono">ID: {s.id}</p>
-                      </div>
-                    </td>
+                {staffAccounts
+                  .filter((s) => {
+                    if (staffRoleFilter !== 'all' && s.role !== staffRoleFilter) return false;
+                    if (staffSearchQuery.trim()) {
+                      const q = staffSearchQuery.toLowerCase();
+                      return s.full_name.toLowerCase().includes(q) || s.email.toLowerCase().includes(q);
+                    }
+                    return true;
+                  })
+                  .map((s) => (
+                    <tr key={s.id} className="hover:bg-purple-50/30 transition-colors">
+                      {/* Staff Info */}
+                      <td className="p-4">
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={s.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80'}
+                            alt={s.full_name}
+                            className="w-10 h-10 rounded-full object-cover border border-purple-200 shadow-sm flex-shrink-0"
+                          />
+                          <div>
+                            <p className="font-black text-navy-950 text-xs">{s.full_name}</p>
+                            <span className="text-[10px] text-gray-400 font-mono">Registered: {s.created_at}</span>
+                          </div>
+                        </div>
+                      </td>
 
-                    <td className="p-4 font-mono font-bold text-navy-950">{s.email}</td>
+                      {/* Email & Contact */}
+                      <td className="p-4">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-mono font-bold text-navy-950 text-xs">{s.email}</span>
+                          <button
+                            onClick={() => handleCopyCredentials(s)}
+                            className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-navy-950 transition-colors"
+                            title="Copy credentials"
+                          >
+                            <Copy className="w-3 h-3" />
+                          </button>
+                        </div>
+                        <p className="font-mono text-gray-500 text-[10px]">{s.phone || 'No phone'}</p>
+                        {copiedStaffId === s.id && (
+                          <span className="text-[10px] text-emerald-600 font-bold">✓ Copied to clipboard!</span>
+                        )}
+                      </td>
 
-                    <td className="p-4 font-mono text-gray-600">{s.phone || 'N/A'}</td>
+                      {/* Role */}
+                      <td className="p-4">
+                        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase inline-flex items-center gap-1.5 ${
+                          s.role === 'admin' ? 'bg-[#2E0854] text-white shadow-sm' :
+                          s.role === 'manager' ? 'bg-amber-100 text-amber-900' : 'bg-emerald-100 text-emerald-900'
+                        }`}>
+                          {s.role === 'admin' && <ShieldCheck className="w-3 h-3 text-gold-400" />}
+                          {s.role === 'manager' && <Briefcase className="w-3 h-3 text-amber-600" />}
+                          {s.role === 'receptionist' && <UserCheck className="w-3 h-3 text-emerald-600" />}
+                          <span>{s.role}</span>
+                        </span>
+                      </td>
 
-                    <td className="p-4">
-                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${
-                        s.role === 'admin' ? 'bg-navy-950 text-gold-400' :
-                        s.role === 'manager' ? 'bg-amber-100 text-amber-900' : 'bg-emerald-100 text-emerald-900'
-                      }`}>
-                        {s.role}
-                      </span>
-                    </td>
+                      {/* Status & Suspend Toggle */}
+                      <td className="p-4">
+                        <div className="space-y-1">
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border inline-block ${
+                            s.status === 'suspended'
+                              ? 'bg-rose-50 text-rose-700 border-rose-200'
+                              : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          }`}>
+                            {s.status === 'suspended' ? 'Suspended' : 'Active'}
+                          </span>
+                          {s.role !== 'admin' && (
+                            <button
+                              onClick={() => handleToggleStaffStatus(s)}
+                              className="block text-[10px] font-bold text-gray-500 hover:text-navy-950 underline transition-colors cursor-pointer"
+                            >
+                              {s.status === 'suspended' ? 'Activate' : 'Suspend'}
+                            </button>
+                          )}
+                        </div>
+                      </td>
 
-                    <td className="p-4">
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                        Active
-                      </span>
-                    </td>
+                      {/* Configured RBAC Permissions */}
+                      <td className="p-4">
+                        <div className="space-y-1">
+                          <div className="flex flex-wrap gap-1 max-w-xs">
+                            {s.permissions?.can_register_walkins && (
+                              <span className="px-2 py-0.5 rounded-md bg-purple-50 text-purple-900 text-[9px] font-bold border border-purple-100">
+                                Walk-ins
+                              </span>
+                            )}
+                            {s.permissions?.can_checkout_guests && (
+                              <span className="px-2 py-0.5 rounded-md bg-purple-50 text-purple-900 text-[9px] font-bold border border-purple-100">
+                                Check-out
+                              </span>
+                            )}
+                            {s.permissions?.can_view_financials && (
+                              <span className="px-2 py-0.5 rounded-md bg-purple-50 text-purple-900 text-[9px] font-bold border border-purple-100">
+                                Financials
+                              </span>
+                            )}
+                            {s.permissions?.can_delete_bookings ? (
+                              <span className="px-2 py-0.5 rounded-md bg-rose-50 text-rose-800 text-[9px] font-bold border border-rose-100">
+                                Deletion Allowed
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-500 text-[9px] font-bold">
+                                No Delete
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => handleOpenEditPermissions(s)}
+                            className="text-[10px] font-bold text-purple-700 hover:text-purple-900 flex items-center gap-1 underline pt-0.5 cursor-pointer"
+                          >
+                            <Sliders className="w-2.5 h-2.5" />
+                            <span>Modify RBAC</span>
+                          </button>
+                        </div>
+                      </td>
 
-                    <td className="p-4 text-gray-500 text-[11px]">{s.created_at}</td>
+                      {/* Actions: Reset Password, RBAC, Edit, Delete */}
+                      <td className="p-4 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => handleOpenResetPassword(s)}
+                            className="px-2.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 text-[11px] font-bold inline-flex items-center gap-1 border border-amber-200 shadow-sm transition-all active:scale-95 cursor-pointer"
+                            title="Reset Staff Password"
+                          >
+                            <Key className="w-3 h-3 text-amber-700" />
+                            <span>Reset Password</span>
+                          </button>
 
-                    <td className="p-4 text-right whitespace-nowrap">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={() => handleOpenEditStaffModal(s)}
-                          className="px-3 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-[#2E0854] text-[11px] font-black inline-flex items-center gap-1.5 shrink-0 border border-purple-100"
-                        >
-                          <Edit2 className="w-3.5 h-3.5 text-purple-700" />
-                          <span>Edit</span>
-                        </button>
-                        <button
-                          onClick={() => handleDeleteStaffAccount(s.id, s.full_name)}
-                          className="px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 text-[11px] font-black inline-flex items-center gap-1.5 shrink-0 border border-rose-100"
-                        >
-                          <UserX className="w-3.5 h-3.5 text-rose-600" />
-                          <span>Delete</span>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                          <button
+                            onClick={() => handleOpenEditPermissions(s)}
+                            className="px-2.5 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-[#2E0854] text-[11px] font-bold inline-flex items-center gap-1 border border-purple-200 transition-all cursor-pointer"
+                            title="Configure Permissions"
+                          >
+                            <Sliders className="w-3 h-3 text-purple-700" />
+                            <span>Permissions</span>
+                          </button>
+
+                          <button
+                            onClick={() => handleOpenEditStaffModal(s)}
+                            className="px-2.5 py-1.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 text-[11px] font-bold inline-flex items-center gap-1 border border-gray-200 transition-all cursor-pointer"
+                            title="Edit Staff Info"
+                          >
+                            <Edit2 className="w-3 h-3" />
+                            <span>Edit</span>
+                          </button>
+
+                          {s.role !== 'admin' && (
+                            <button
+                              onClick={() => handleDeleteStaffAccount(s.id, s.full_name)}
+                              className="p-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 text-[11px] font-bold inline-flex items-center border border-rose-100 transition-all cursor-pointer"
+                              title="Delete Staff"
+                            >
+                              <UserX className="w-3.5 h-3.5 text-rose-600" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
               </tbody>
             </table>
           </div>
@@ -1971,177 +2410,590 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ adminUse
       {/* Modal: Create or Edit Staff Account */}
       {showStaffModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-950/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 border border-gray-100 shadow-2xl space-y-4">
-            <div className="flex justify-between items-center border-b border-gray-100 pb-3">
-              <div className="flex items-center gap-2">
-                <UserPlus className="w-5 h-5 text-gold-600" />
-                <h3 className="font-extrabold text-navy-950 text-base">
-                  {editingStaff ? `Edit Staff: ${editingStaff.full_name}` : 'Create Staff Account'}
-                </h3>
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 border border-gray-100 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
+            
+            {/* Modal Header */}
+            <div className="flex justify-between items-center border-b border-gray-100 pb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-purple-50 flex items-center justify-center text-[#2E0854]">
+                  <UserPlus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-navy-950 text-base">
+                    {editingStaff ? `Edit Staff: ${editingStaff.full_name}` : 'Register Staff Account'}
+                  </h3>
+                  <p className="text-[11px] text-gray-400 font-medium">
+                    Create credentials for Managers & Receptionists to access their console desks
+                  </p>
+                </div>
               </div>
-              <button onClick={() => setShowStaffModal(false)}>
-                <X className="w-5 h-5 text-gray-400" />
+              <button 
+                onClick={() => setShowStaffModal(false)}
+                className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="w-5 h-5" />
               </button>
             </div>
 
             {staffErrorMsg && (
-              <div className="bg-red-50 border border-red-200 text-red-700 text-xs font-semibold p-3 rounded-xl">
-                {staffErrorMsg}
+              <div className="bg-red-50 border border-red-200 text-red-700 text-xs font-semibold p-3.5 rounded-2xl flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-red-600 flex-shrink-0" />
+                <span>{staffErrorMsg}</span>
               </div>
             )}
 
             <form onSubmit={handleSaveStaffAccount} className="space-y-4">
+              
+              {/* Role Selection Cards */}
               <div>
-                <label className="text-[10px] uppercase font-bold text-gray-400 block mb-1">Select Role</label>
+                <label className="text-[10px] uppercase font-black text-gray-400 block mb-1.5 tracking-wider">
+                  Select Role & Responsibility
+                </label>
                 <div className="grid grid-cols-3 gap-2">
                   <button
                     type="button"
-                    onClick={() => setStaffRole('receptionist')}
-                    className={`py-2 rounded-xl text-xs font-bold ${staffRole === 'receptionist' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-gray-100 text-gray-600'}`}
+                    onClick={() => {
+                      setStaffRole('receptionist');
+                      setStaffPermWalkin(true);
+                      setStaffPermCheckout(true);
+                      setStaffPermStatus(true);
+                      setStaffPermFinancials(true);
+                      setStaffPermMessages(true);
+                    }}
+                    className={`p-3 rounded-2xl border flex flex-col items-center text-center gap-1 transition-all cursor-pointer ${
+                      staffRole === 'receptionist'
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-md scale-[1.02]'
+                        : 'bg-gray-50 hover:bg-gray-100 text-gray-700 border-gray-200'
+                    }`}
                   >
-                    Receptionist
+                    <UserCheck className={`w-5 h-5 ${staffRole === 'receptionist' ? 'text-white' : 'text-emerald-600'}`} />
+                    <span className="text-xs font-black">Receptionist</span>
+                    <span className={`text-[9px] leading-tight ${staffRole === 'receptionist' ? 'text-emerald-100' : 'text-gray-400'}`}>
+                      Front Desk, Check-In/Out
+                    </span>
                   </button>
+
                   <button
                     type="button"
-                    onClick={() => setStaffRole('manager')}
-                    className={`py-2 rounded-xl text-xs font-bold ${staffRole === 'manager' ? 'bg-gold-500 text-navy-950 shadow-sm' : 'bg-gray-100 text-gray-600'}`}
+                    onClick={() => {
+                      setStaffRole('manager');
+                      setStaffPermWalkin(true);
+                      setStaffPermCheckout(true);
+                      setStaffPermStatus(true);
+                      setStaffPermFinancials(true);
+                      setStaffPermMessages(true);
+                    }}
+                    className={`p-3 rounded-2xl border flex flex-col items-center text-center gap-1 transition-all cursor-pointer ${
+                      staffRole === 'manager'
+                        ? 'bg-amber-800 text-white border-amber-800 shadow-md scale-[1.02]'
+                        : 'bg-gray-50 hover:bg-gray-100 text-gray-700 border-gray-200'
+                    }`}
                   >
-                    Manager
+                    <Briefcase className={`w-5 h-5 ${staffRole === 'manager' ? 'text-white' : 'text-amber-600'}`} />
+                    <span className="text-xs font-black">Manager</span>
+                    <span className={`text-[9px] leading-tight ${staffRole === 'manager' ? 'text-amber-100' : 'text-gray-400'}`}>
+                      Console & Inventory Oversight
+                    </span>
                   </button>
+
                   <button
                     type="button"
                     onClick={() => setStaffRole('admin')}
-                    className={`py-2 rounded-xl text-xs font-bold ${staffRole === 'admin' ? 'bg-navy-950 text-white shadow-sm' : 'bg-gray-100 text-gray-600'}`}
+                    className={`p-3 rounded-2xl border flex flex-col items-center text-center gap-1 transition-all cursor-pointer ${
+                      staffRole === 'admin'
+                        ? 'bg-navy-950 text-white border-navy-950 shadow-md scale-[1.02]'
+                        : 'bg-gray-50 hover:bg-gray-100 text-gray-700 border-gray-200'
+                    }`}
                   >
-                    Admin
+                    <ShieldCheck className={`w-5 h-5 ${staffRole === 'admin' ? 'text-gold-400' : 'text-purple-700'}`} />
+                    <span className="text-xs font-black">Admin</span>
+                    <span className={`text-[9px] leading-tight ${staffRole === 'admin' ? 'text-purple-200' : 'text-gray-400'}`}>
+                      Executive Platform Access
+                    </span>
                   </button>
                 </div>
               </div>
 
+              {/* Full Name */}
               <div>
-                <label className="text-[10px] uppercase font-bold text-gray-400 block mb-1">Full Name</label>
+                <label className="text-[10px] uppercase font-black text-gray-400 block mb-1">Full Name</label>
                 <input
                   type="text"
                   value={staffFullName}
                   onChange={(e) => setStaffFullName(e.target.value)}
-                  placeholder="e.g. Ama Konadu"
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-navy-950 outline-none"
+                  placeholder="e.g. Kwame Mensah"
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs font-bold text-navy-950 outline-none focus:bg-white focus:border-purple-600 transition-all"
                   required
                 />
               </div>
 
+              {/* Email Address */}
               <div>
-                <label className="text-[10px] uppercase font-bold text-gray-400 block mb-1">Email Address</label>
+                <label className="text-[10px] uppercase font-black text-gray-400 block mb-1">Email Address (Login Username)</label>
                 <input
                   type="email"
                   value={staffEmail}
                   onChange={(e) => setStaffEmail(e.target.value)}
                   disabled={Boolean(editingStaff)}
-                  placeholder="e.g. ama.reception@reetay.com"
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-navy-950 outline-none disabled:opacity-50"
+                  placeholder={staffRole === 'manager' ? 'e.g. kwame.manager@reetay.com' : 'e.g. kwame.reception@reetay.com'}
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs font-bold text-navy-950 outline-none disabled:opacity-50 focus:bg-white focus:border-purple-600 transition-all"
                   required
                 />
               </div>
 
+              {/* Password with Auto-Generator and Eye Toggle */}
               <div>
-                <label className="text-[10px] uppercase font-bold text-gray-400 block mb-1">Login Password</label>
-                <input
-                  type="password"
-                  value={staffPassword}
-                  onChange={(e) => setStaffPassword(e.target.value)}
-                  placeholder="Set initial password"
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-navy-950 outline-none"
-                  required
-                />
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[10px] uppercase font-black text-gray-400">Login Password</label>
+                  <button
+                    type="button"
+                    onClick={handleGeneratePassword}
+                    className="text-[10px] font-bold text-purple-700 hover:text-purple-900 bg-purple-50 px-2 py-0.5 rounded-lg border border-purple-200 transition-colors cursor-pointer"
+                  >
+                    ⚡ Auto-Generate
+                  </button>
+                </div>
+                <div className="relative bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 flex items-center gap-2 focus-within:border-purple-600 focus-within:bg-white transition-all">
+                  <Lock className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                  <input
+                    type={showStaffPassword ? 'text' : 'password'}
+                    value={staffPassword}
+                    onChange={(e) => setStaffPassword(e.target.value)}
+                    placeholder="Enter password"
+                    className="w-full bg-transparent text-xs font-bold text-navy-950 outline-none"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowStaffPassword(!showStaffPassword)}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    {showStaffPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
 
+              {/* Phone Number */}
               <div>
-                <label className="text-[10px] uppercase font-bold text-gray-400 block mb-1">Phone Number</label>
+                <label className="text-[10px] uppercase font-black text-gray-400 block mb-1">Phone Number (Optional)</label>
                 <input
                   type="text"
                   value={staffPhone}
                   onChange={(e) => setStaffPhone(e.target.value)}
                   placeholder="e.g. +233 24 123 4567"
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-navy-950 outline-none"
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs font-bold text-navy-950 outline-none focus:bg-white focus:border-purple-600 transition-all"
                 />
               </div>
 
               {/* Feature Access & Permission Configurator */}
-              <div className="bg-purple-50/50 p-3 rounded-2xl border border-purple-100 space-y-2 text-xs">
-                <span className="text-[10px] font-black uppercase text-purple-900 block">
-                  Staff Feature Access & Permissions
+              <div className="bg-purple-50/60 p-4 rounded-2xl border border-purple-100 space-y-2.5 text-xs">
+                <span className="text-[10px] font-black uppercase text-purple-950 block tracking-wider">
+                  Configured Desk & Console Permissions
                 </span>
 
-                <label className="flex items-center gap-2 cursor-pointer text-navy-950 font-extrabold text-[11px]">
+                <label className="flex items-center gap-2.5 cursor-pointer text-navy-950 font-bold text-xs">
                   <input
                     type="checkbox"
                     checked={staffPermWalkin}
                     onChange={(e) => setStaffPermWalkin(e.target.checked)}
-                    className="accent-purple-600 rounded"
+                    className="accent-purple-700 w-4 h-4 rounded cursor-pointer"
                   />
                   <span>Register Walk-in Guests & Short-Time Stays</span>
                 </label>
 
-                <label className="flex items-center gap-2 cursor-pointer text-navy-950 font-extrabold text-[11px]">
+                <label className="flex items-center gap-2.5 cursor-pointer text-navy-950 font-bold text-xs">
                   <input
                     type="checkbox"
                     checked={staffPermCheckout}
                     onChange={(e) => setStaffPermCheckout(e.target.checked)}
-                    className="accent-purple-600 rounded"
+                    className="accent-purple-700 w-4 h-4 rounded cursor-pointer"
                   />
                   <span>Perform Client Check-Out & Release Rooms</span>
                 </label>
 
-                <label className="flex items-center gap-2 cursor-pointer text-navy-950 font-extrabold text-[11px]">
+                <label className="flex items-center gap-2.5 cursor-pointer text-navy-950 font-bold text-xs">
                   <input
                     type="checkbox"
                     checked={staffPermStatus}
                     onChange={(e) => setStaffPermStatus(e.target.checked)}
-                    className="accent-purple-600 rounded"
+                    className="accent-purple-700 w-4 h-4 rounded cursor-pointer"
                   />
-                  <span>Edit Reservation Status Dropdown</span>
+                  <span>Edit Reservation Status & Arrival Flags</span>
                 </label>
 
-                <label className="flex items-center gap-2 cursor-pointer text-navy-950 font-extrabold text-[11px]">
+                <label className="flex items-center gap-2.5 cursor-pointer text-navy-950 font-bold text-xs">
                   <input
                     type="checkbox"
                     checked={staffPermFinancials}
                     onChange={(e) => setStaffPermFinancials(e.target.checked)}
-                    className="accent-purple-600 rounded"
+                    className="accent-purple-700 w-4 h-4 rounded cursor-pointer"
                   />
                   <span>View Revenue Stats & Daily Financial Totals</span>
                 </label>
 
-                <label className="flex items-center gap-2 cursor-pointer text-navy-950 font-extrabold text-[11px]">
+                <label className="flex items-center gap-2.5 cursor-pointer text-navy-950 font-bold text-xs">
                   <input
                     type="checkbox"
                     checked={staffPermMessages}
                     onChange={(e) => setStaffPermMessages(e.target.checked)}
-                    className="accent-purple-600 rounded"
+                    className="accent-purple-700 w-4 h-4 rounded cursor-pointer"
                   />
                   <span>Send Guest Email Communications & Notifications</span>
                 </label>
 
                 {staffRole === 'receptionist' && (
-                  <p className="text-[10px] text-red-600 font-bold italic pt-1 border-t border-purple-100">
-                    * Note: Receptionists are automatically restricted from deleting bookings.
+                  <p className="text-[10px] text-rose-700 font-bold italic pt-1.5 border-t border-purple-200/60">
+                    * Policy: Receptionist accounts are restricted from permanently deleting bookings.
                   </p>
                 )}
               </div>
 
-              <div className="pt-2 flex justify-end gap-2 border-t border-gray-100">
+              {/* Form Action Buttons */}
+              <div className="pt-3 flex items-center justify-end gap-2.5 border-t border-gray-100">
                 <button
                   type="button"
                   onClick={() => setShowStaffModal(false)}
+                  className="px-4 py-2.5 rounded-xl text-xs font-bold text-gray-500 hover:bg-gray-100 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 rounded-xl bg-navy-950 hover:bg-navy-900 text-white font-extrabold text-xs shadow-md active:scale-95 transition-all cursor-pointer"
+                >
+                  {editingStaff ? 'Save Staff Updates' : `Register ${staffRole.toUpperCase()} Account`}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Admin Staff Password Reset */}
+      {showResetPasswordModal && passwordResetTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-950/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 border border-gray-100 shadow-2xl space-y-4">
+            <div className="flex justify-between items-center border-b border-gray-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-amber-50 flex items-center justify-center text-amber-700">
+                  <Key className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-navy-950 text-base">
+                    Reset Password: {passwordResetTarget.full_name}
+                  </h3>
+                  <p className="text-[11px] text-gray-400 font-medium capitalize">
+                    {passwordResetTarget.role} • {passwordResetTarget.email}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowResetPasswordModal(false)}
+                className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmResetPassword} className="space-y-4">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[10px] uppercase font-black text-gray-400">New Password</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+                      setResetPasswordValue(passwordResetTarget.role === 'manager' ? `Mgr#${randomSuffix}` : `Staff#${randomSuffix}`);
+                    }}
+                    className="text-[10px] font-bold text-purple-700 hover:text-purple-900 bg-purple-50 px-2 py-0.5 rounded-lg border border-purple-200 cursor-pointer"
+                  >
+                    ⚡ Auto-Generate
+                  </button>
+                </div>
+                <div className="relative bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 flex items-center gap-2 focus-within:border-purple-600 focus-within:bg-white transition-all">
+                  <Lock className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                  <input
+                    type={showResetPasswordPlain ? 'text' : 'password'}
+                    value={resetPasswordValue}
+                    onChange={(e) => setResetPasswordValue(e.target.value)}
+                    placeholder="Enter new password"
+                    className="w-full bg-transparent text-xs font-bold text-navy-950 outline-none"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowResetPasswordPlain(!showResetPasswordPlain)}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    {showResetPasswordPlain ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="bg-amber-50/70 p-3.5 rounded-2xl border border-amber-200/70 text-xs text-amber-950 space-y-1">
+                <p className="font-bold flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-amber-700 shrink-0" />
+                  <span>Immediate Credential Update</span>
+                </p>
+                <p className="text-[11px] text-amber-900 leading-relaxed">
+                  The staff member will be required to authenticate with this new password on their next login session at <strong>/admin/login</strong>.
+                </p>
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setShowResetPasswordModal(false)}
                   className="px-4 py-2 rounded-xl text-xs font-bold text-gray-500 hover:bg-gray-100"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-navy-950 hover:bg-navy-900 text-white font-bold text-xs shadow-md"
+                  className="px-5 py-2.5 rounded-xl bg-navy-950 hover:bg-navy-900 text-white font-extrabold text-xs shadow-md active:scale-95 transition-all cursor-pointer"
                 >
-                  {editingStaff ? 'Save Staff Updates' : 'Create Staff Account'}
+                  Confirm & Save Password
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Granular RBAC Permissions Configurator */}
+      {showPermissionsModal && permissionsEditTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-950/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-6 sm:p-7 border border-gray-100 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b border-gray-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-purple-50 flex items-center justify-center text-[#2E0854]">
+                  <Sliders className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-navy-950 text-base">
+                    Access Control: {permissionsEditTarget.full_name}
+                  </h3>
+                  <p className="text-[11px] text-gray-400 font-medium capitalize">
+                    Assigned Role: {permissionsEditTarget.role} • {permissionsEditTarget.email}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowPermissionsModal(false)}
+                className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Role Preset Template Buttons */}
+            <div>
+              <label className="text-[10px] uppercase font-black text-gray-400 block mb-1.5">
+                Apply Role Preset Template
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditablePermissions({ ...DEFAULT_RECEPTIONIST_PERMISSIONS })}
+                  className="py-2 px-3 rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 text-[11px] font-extrabold transition-colors text-center cursor-pointer"
+                >
+                  Receptionist Preset
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditablePermissions({ ...DEFAULT_MANAGER_PERMISSIONS })}
+                  className="py-2 px-3 rounded-xl border border-amber-200 bg-amber-50 hover:bg-amber-100 text-amber-900 text-[11px] font-extrabold transition-colors text-center cursor-pointer"
+                >
+                  Manager Preset
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditablePermissions({ ...DEFAULT_ADMIN_PERMISSIONS })}
+                  className="py-2 px-3 rounded-xl border border-purple-200 bg-purple-50 hover:bg-purple-100 text-[#2E0854] text-[11px] font-extrabold transition-colors text-center cursor-pointer"
+                >
+                  Admin Preset
+                </button>
+              </div>
+            </div>
+
+            <form onSubmit={handleSavePermissions} className="space-y-4">
+              
+              {/* Category 1: Front Desk Operations */}
+              <div className="border border-gray-100 rounded-2xl p-4 space-y-2.5 bg-gray-50/50">
+                <span className="text-[10px] font-black uppercase text-purple-900 block tracking-wider">
+                  1. Front Desk Operations
+                </span>
+                <label className="flex items-center gap-2.5 text-navy-950 font-bold text-xs cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editablePermissions.can_register_walkins}
+                    onChange={(e) => setEditablePermissions({ ...editablePermissions, can_register_walkins: e.target.checked })}
+                    className="accent-purple-700 w-4 h-4 rounded"
+                  />
+                  <span>Register Walk-in Guests & Short-Time Stays</span>
+                </label>
+                <label className="flex items-center gap-2.5 text-navy-950 font-bold text-xs cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editablePermissions.can_checkin_guests}
+                    onChange={(e) => setEditablePermissions({ ...editablePermissions, can_checkin_guests: e.target.checked })}
+                    className="accent-purple-700 w-4 h-4 rounded"
+                  />
+                  <span>Perform Guest Check-in & Key Release</span>
+                </label>
+                <label className="flex items-center gap-2.5 text-navy-950 font-bold text-xs cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editablePermissions.can_checkout_guests}
+                    onChange={(e) => setEditablePermissions({ ...editablePermissions, can_checkout_guests: e.target.checked })}
+                    className="accent-purple-700 w-4 h-4 rounded"
+                  />
+                  <span>Perform Guest Check-out & Room Release</span>
+                </label>
+                <label className="flex items-center gap-2.5 text-navy-950 font-bold text-xs cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editablePermissions.can_update_room_status}
+                    onChange={(e) => setEditablePermissions({ ...editablePermissions, can_update_room_status: e.target.checked })}
+                    className="accent-purple-700 w-4 h-4 rounded"
+                  />
+                  <span>Update Housekeeping & Turnover Status</span>
+                </label>
+              </div>
+
+              {/* Category 2: Reservations & Pricing Control */}
+              <div className="border border-gray-100 rounded-2xl p-4 space-y-2.5 bg-gray-50/50">
+                <span className="text-[10px] font-black uppercase text-purple-900 block tracking-wider">
+                  2. Reservations & Pricing Control
+                </span>
+                <label className="flex items-center gap-2.5 text-navy-950 font-bold text-xs cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editablePermissions.can_edit_booking_status}
+                    onChange={(e) => setEditablePermissions({ ...editablePermissions, can_edit_booking_status: e.target.checked })}
+                    className="accent-purple-700 w-4 h-4 rounded"
+                  />
+                  <span>Edit Reservation Status & Arrival Flags</span>
+                </label>
+                <label className="flex items-center gap-2.5 text-navy-950 font-bold text-xs cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editablePermissions.can_cancel_bookings}
+                    onChange={(e) => setEditablePermissions({ ...editablePermissions, can_cancel_bookings: e.target.checked })}
+                    className="accent-purple-700 w-4 h-4 rounded"
+                  />
+                  <span>Cancel Reservations & Release Units</span>
+                </label>
+                <label className="flex items-center gap-2.5 text-rose-950 font-bold text-xs cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editablePermissions.can_delete_bookings}
+                    onChange={(e) => setEditablePermissions({ ...editablePermissions, can_delete_bookings: e.target.checked })}
+                    className="accent-rose-600 w-4 h-4 rounded"
+                  />
+                  <span>Permanently Delete Bookings (High Risk)</span>
+                </label>
+                <label className="flex items-center gap-2.5 text-navy-950 font-bold text-xs cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editablePermissions.can_override_pricing}
+                    onChange={(e) => setEditablePermissions({ ...editablePermissions, can_override_pricing: e.target.checked })}
+                    className="accent-purple-700 w-4 h-4 rounded"
+                  />
+                  <span>Manual Price Overrides & Custom Discounts</span>
+                </label>
+              </div>
+
+              {/* Category 3: Financial Oversight & Reports */}
+              <div className="border border-gray-100 rounded-2xl p-4 space-y-2.5 bg-gray-50/50">
+                <span className="text-[10px] font-black uppercase text-purple-900 block tracking-wider">
+                  3. Financial Oversight & Reports
+                </span>
+                <label className="flex items-center gap-2.5 text-navy-950 font-bold text-xs cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editablePermissions.can_view_financials}
+                    onChange={(e) => setEditablePermissions({ ...editablePermissions, can_view_financials: e.target.checked })}
+                    className="accent-purple-700 w-4 h-4 rounded"
+                  />
+                  <span>View Daily Cash Collections & Revenue Totals</span>
+                </label>
+                <label className="flex items-center gap-2.5 text-navy-950 font-bold text-xs cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editablePermissions.can_view_revenue_reports}
+                    onChange={(e) => setEditablePermissions({ ...editablePermissions, can_view_revenue_reports: e.target.checked })}
+                    className="accent-purple-700 w-4 h-4 rounded"
+                  />
+                  <span>Monthly Revenue Accounting & Rollover Reports</span>
+                </label>
+                <label className="flex items-center gap-2.5 text-navy-950 font-bold text-xs cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editablePermissions.can_process_refunds}
+                    onChange={(e) => setEditablePermissions({ ...editablePermissions, can_process_refunds: e.target.checked })}
+                    className="accent-purple-700 w-4 h-4 rounded"
+                  />
+                  <span>Process Guest Refunds & Deposit Returns</span>
+                </label>
+              </div>
+
+              {/* Category 4: Inventory & Communications */}
+              <div className="border border-gray-100 rounded-2xl p-4 space-y-2.5 bg-gray-50/50">
+                <span className="text-[10px] font-black uppercase text-purple-900 block tracking-wider">
+                  4. Inventory & Guest Communications
+                </span>
+                <label className="flex items-center gap-2.5 text-navy-950 font-bold text-xs cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editablePermissions.can_manage_inventory}
+                    onChange={(e) => setEditablePermissions({ ...editablePermissions, can_manage_inventory: e.target.checked })}
+                    className="accent-purple-700 w-4 h-4 rounded"
+                  />
+                  <span>Add, Edit, and Manage Listings & Fleet Vehicles</span>
+                </label>
+                <label className="flex items-center gap-2.5 text-navy-950 font-bold text-xs cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editablePermissions.can_lock_calendar}
+                    onChange={(e) => setEditablePermissions({ ...editablePermissions, can_lock_calendar: e.target.checked })}
+                    className="accent-purple-700 w-4 h-4 rounded"
+                  />
+                  <span>Calendar Lock & Date Guard</span>
+                </label>
+                <label className="flex items-center gap-2.5 text-navy-950 font-bold text-xs cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editablePermissions.can_send_messages}
+                    onChange={(e) => setEditablePermissions({ ...editablePermissions, can_send_messages: e.target.checked })}
+                    className="accent-purple-700 w-4 h-4 rounded"
+                  />
+                  <span>Send Guest Email Communications & Notifications</span>
+                </label>
+                <label className="flex items-center gap-2.5 text-navy-950 font-bold text-xs cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editablePermissions.can_settle_incidents}
+                    onChange={(e) => setEditablePermissions({ ...editablePermissions, can_settle_incidents: e.target.checked })}
+                    className="accent-purple-700 w-4 h-4 rounded"
+                  />
+                  <span>Settle Damaged / Missing Item Incident Reports</span>
+                </label>
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setShowPermissionsModal(false)}
+                  className="px-4 py-2.5 rounded-xl text-xs font-bold text-gray-500 hover:bg-gray-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 rounded-xl bg-navy-950 hover:bg-navy-900 text-white font-extrabold text-xs shadow-md active:scale-95 transition-all cursor-pointer"
+                >
+                  Enforce Access Permissions
                 </button>
               </div>
             </form>

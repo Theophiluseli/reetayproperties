@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { dataService } from '../../lib/supabase';
+import { useRealtimeSync } from '../../lib/realtimeSync';
 import { Property, Booking, User } from '../../types';
 import { IncomingReservationsDesk } from '../../components/dashboard/IncomingReservationsDesk';
 import {
@@ -70,6 +71,10 @@ export const ReceptionDashboardPage: React.FC<ReceptionDashboardPageProps> = ({ 
   const [agreedPrice, setAgreedPrice] = useState(100);
   const [specialNotes, setSpecialNotes] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+
+  useRealtimeSync(['properties', 'bookings', 'users', 'shift_handovers'], () => {
+    loadData();
+  });
 
   useEffect(() => {
     loadData();

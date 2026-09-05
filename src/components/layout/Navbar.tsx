@@ -16,7 +16,11 @@ import {
   X,
   LogIn,
   UserPlus,
-  Shield
+  Shield,
+  Heart,
+  Calendar,
+  Settings,
+  Users
 } from 'lucide-react';
 import { VerticalType, User } from '../../types';
 import { AuthModal } from '../auth/AuthModal';
@@ -67,57 +71,59 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <>
       {/* Full-Width Responsive Floating Pill Header (Image 2 Style with White Theme) */}
-      <header className="sticky top-2 sm:top-4 z-40 w-full px-3 sm:px-6 lg:px-8 max-w-7xl mx-auto transition-all">
-        <div className="relative w-full bg-white/95 backdrop-blur-md rounded-full border border-purple-100/90 shadow-lg hover:shadow-xl transition-all px-6 sm:px-8 lg:px-10 py-2.5 flex items-center justify-between h-20">
+      <header className="sticky top-2 sm:top-4 z-40 w-full px-2.5 sm:px-6 lg:px-8 max-w-7xl mx-auto transition-all">
+        <div className="relative w-full bg-white/95 backdrop-blur-md rounded-full border border-purple-100/90 shadow-lg hover:shadow-xl transition-all px-3 sm:px-6 lg:px-8 py-1.5 sm:py-2 flex items-center justify-between h-16 sm:h-20">
           
-          {/* Left: Reetay Official Logo */}
-          <div className="flex items-center flex-shrink-0">
-            <Link to="/" className="group flex items-center" onClick={() => setIsMobileMenuOpen(false)}>
+          {/* Left Column: Reetay Official Logo */}
+          <div className="flex-shrink-0 md:flex-1 flex items-center justify-start">
+            <Link to="/" className="group flex items-center flex-shrink-0" onClick={() => setIsMobileMenuOpen(false)}>
               <ReetayLogo size="md" />
             </Link>
           </div>
 
-          {/* Center Area: Perfectly Centered Public Vertical Selector (Desktop) */}
+          {/* Center Column: Perfectly Centered Public Vertical Selector (Desktop md+) */}
           {!isDashboardRoute ? (
-            <nav className="absolute left-1/2 -translate-x-1/2 hidden md:flex items-center bg-purple-50/70 p-1.5 rounded-full border border-purple-100/80 shadow-inner z-10">
-              <button
-                onClick={() => onVerticalChange && onVerticalChange('stays')}
-                className={`flex items-center gap-2 px-5 py-2 rounded-full text-xs sm:text-sm font-extrabold transition-all ${
-                  activeVertical === 'stays'
-                    ? 'bg-[#2E0854] text-white shadow-sm'
-                    : 'text-purple-900 hover:text-[#2E0854] hover:bg-white/60'
-                }`}
-              >
-                <Bed className={`w-4 h-4 ${activeVertical === 'stays' ? 'text-white' : 'text-purple-400'}`} />
-                <span>Stays</span>
-              </button>
+            <div className="flex-shrink-0 hidden md:flex items-center justify-center">
+              <nav className="flex items-center bg-purple-50/70 p-1.5 rounded-full border border-purple-100/80 shadow-inner">
+                <button
+                  onClick={() => onVerticalChange && onVerticalChange('stays')}
+                  className={`flex items-center gap-1.5 lg:gap-2 px-3.5 lg:px-5 py-2 rounded-full text-xs lg:text-sm font-extrabold transition-all ${
+                    activeVertical === 'stays'
+                      ? 'bg-[#2E0854] text-white shadow-sm'
+                      : 'text-purple-900 hover:text-[#2E0854] hover:bg-white/60'
+                  }`}
+                >
+                  <Bed className={`w-4 h-4 ${activeVertical === 'stays' ? 'text-white' : 'text-purple-400'}`} />
+                  <span>Stays</span>
+                </button>
 
-              <button
-                onClick={() => onVerticalChange && onVerticalChange('cars')}
-                className={`flex items-center gap-2 px-5 py-2 rounded-full text-xs sm:text-sm font-extrabold transition-all ${
-                  activeVertical === 'cars'
-                    ? 'bg-[#2E0854] text-white shadow-sm'
-                    : 'text-purple-900 hover:text-[#2E0854] hover:bg-white/60'
-                }`}
-              >
-                <Car className={`w-4 h-4 ${activeVertical === 'cars' ? 'text-white' : 'text-purple-400'}`} />
-                <span>Cars</span>
-              </button>
+                <button
+                  onClick={() => onVerticalChange && onVerticalChange('cars')}
+                  className={`flex items-center gap-1.5 lg:gap-2 px-3.5 lg:px-5 py-2 rounded-full text-xs lg:text-sm font-extrabold transition-all ${
+                    activeVertical === 'cars'
+                      ? 'bg-[#2E0854] text-white shadow-sm'
+                      : 'text-purple-900 hover:text-[#2E0854] hover:bg-white/60'
+                  }`}
+                >
+                  <Car className={`w-4 h-4 ${activeVertical === 'cars' ? 'text-white' : 'text-purple-400'}`} />
+                  <span>Cars</span>
+                </button>
 
-              <button
-                onClick={() => onVerticalChange && onVerticalChange('experiences')}
-                className={`flex items-center gap-2 px-5 py-2 rounded-full text-xs sm:text-sm font-extrabold transition-all ${
-                  activeVertical === 'experiences'
-                    ? 'bg-[#2E0854] text-white shadow-sm'
-                    : 'text-purple-900 hover:text-[#2E0854] hover:bg-white/60'
-                }`}
-              >
-                <Sparkles className={`w-4 h-4 ${activeVertical === 'experiences' ? 'text-white' : 'text-purple-400'}`} />
-                <span>Experiences</span>
-              </button>
-            </nav>
+                <button
+                  onClick={() => onVerticalChange && onVerticalChange('experiences')}
+                  className={`flex items-center gap-1.5 lg:gap-2 px-3.5 lg:px-5 py-2 rounded-full text-xs lg:text-sm font-extrabold transition-all ${
+                    activeVertical === 'experiences'
+                      ? 'bg-[#2E0854] text-white shadow-sm'
+                      : 'text-purple-900 hover:text-[#2E0854] hover:bg-white/60'
+                  }`}
+                >
+                  <Sparkles className={`w-4 h-4 ${activeVertical === 'experiences' ? 'text-white' : 'text-purple-400'}`} />
+                  <span>Experiences</span>
+                </button>
+              </nav>
+            </div>
           ) : (
-            <div className="absolute left-1/2 -translate-x-1/2 hidden md:flex items-center z-10">
+            <div className="flex-shrink-0 hidden md:flex items-center justify-center">
               {location.pathname.startsWith('/admin') && (
                 <span className="px-4 py-2 rounded-full bg-[#2E0854] text-white text-xs font-extrabold uppercase tracking-wider flex items-center gap-2 shadow-sm border border-purple-800">
                   <ShieldCheck className="w-4 h-4 text-amber-400" />
@@ -132,6 +138,13 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </span>
               )}
 
+              {location.pathname.startsWith('/reception') && (
+                <span className="px-4 py-2 rounded-full bg-emerald-900 text-emerald-300 text-xs font-extrabold uppercase tracking-wider flex items-center gap-2 shadow-sm border border-emerald-800">
+                  <UserCheck className="w-4 h-4 text-emerald-400" />
+                  <span>Reception Desk</span>
+                </span>
+              )}
+
               {location.pathname.startsWith('/dashboard') && (
                 <span className="px-4 py-2 rounded-full bg-purple-100 text-[#2E0854] text-xs font-extrabold uppercase tracking-wider flex items-center gap-2 shadow-sm border border-purple-200">
                   <LayoutDashboard className="w-4 h-4 text-purple-700" />
@@ -141,36 +154,34 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           )}
 
-          {/* Right Controls: Desktop Auth Buttons + User Account + 3-Line Hamburger Menu */}
-          <div className="flex items-center gap-3 ml-auto z-20">
+          {/* Right Column: Auth Buttons or User Account + Mobile Menu Toggle */}
+          <div className="flex items-center justify-end gap-1.5 sm:gap-2.5 lg:gap-3 md:flex-1 ml-auto">
             
-            {/* Desktop & Tablet Auth Buttons */}
-            {(!currentUser || currentUser.role === 'guest') && (
-              <div className="hidden md:flex items-center gap-3 flex-shrink-0">
+            {/* When NOT logged in: Prominent Log in and Sign up buttons */}
+            {!currentUser ? (
+              <div className="flex items-center gap-1.5 sm:gap-2.5 lg:gap-3 flex-shrink-0">
                 <button
                   onClick={() => handleOpenAuth('login')}
-                  className="px-5 py-2.5 rounded-full text-xs sm:text-sm font-extrabold text-[#2E0854] bg-purple-50/70 border border-purple-200/80 hover:bg-purple-100/90 hover:border-purple-300 hover:shadow-sm active:scale-95 transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer"
+                  className="px-2.5 sm:px-4 lg:px-5 py-1.5 sm:py-2 lg:py-2.5 rounded-full text-xs lg:text-sm font-extrabold text-[#2E0854] bg-purple-50/80 border border-purple-200/80 hover:bg-purple-100 hover:border-purple-300 hover:shadow-sm active:scale-95 transition-all flex items-center gap-1.5 sm:gap-2 whitespace-nowrap cursor-pointer"
                 >
-                  <LogIn className="w-4 h-4 text-purple-700 flex-shrink-0" />
+                  <LogIn className="w-3.5 h-3.5 lg:w-4 lg:h-4 text-purple-700 flex-shrink-0 hidden sm:inline" />
                   <span>Log in</span>
                 </button>
 
                 <button
                   onClick={() => handleOpenAuth('signup')}
-                  className="px-6 py-2.5 rounded-full text-xs sm:text-sm font-extrabold text-white bg-gradient-to-r from-[#2E0854] via-purple-900 to-[#2E0854] hover:brightness-110 shadow-md hover:shadow-lg hover:scale-102 active:scale-95 transition-all flex items-center gap-2 border border-purple-800/40 whitespace-nowrap cursor-pointer"
+                  className="px-3 sm:px-4.5 lg:px-6 py-1.5 sm:py-2 lg:py-2.5 rounded-full text-xs lg:text-sm font-extrabold text-white bg-gradient-to-r from-[#2E0854] via-purple-900 to-[#2E0854] hover:brightness-110 shadow-sm hover:shadow-md hover:scale-102 active:scale-95 transition-all flex items-center gap-1.5 sm:gap-2 border border-purple-800/40 whitespace-nowrap cursor-pointer"
                 >
-                  <UserPlus className="w-4 h-4 text-amber-300 flex-shrink-0" />
+                  <UserPlus className="w-3.5 h-3.5 lg:w-4 lg:h-4 text-amber-300 flex-shrink-0 hidden sm:inline" />
                   <span>Sign up</span>
                 </button>
               </div>
-            )}
-
-            {/* Staff / Logged In User Dropdown */}
-            {currentUser && currentUser.role !== 'guest' ? (
+            ) : (
+              /* When Logged in: User Account Avatar & Menu */
               <div className="relative">
                 <button
                   onClick={() => setShowDropdown(!showDropdown)}
-                  className="flex items-center gap-2 p-1 pr-3 rounded-full border border-purple-200 hover:border-purple-600 transition-all bg-white"
+                  className="flex items-center gap-2 p-1 sm:pr-3 rounded-full border border-purple-200 hover:border-purple-600 transition-all bg-white shadow-sm"
                 >
                   <div className="w-8 h-8 rounded-full bg-[#2E0854] text-white font-black text-xs flex items-center justify-center flex-shrink-0">
                     {getInitials(currentUser.full_name)}
@@ -178,19 +189,55 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <span className="text-xs font-extrabold text-[#2E0854] max-w-[110px] truncate hidden sm:inline">
                     {currentUser.full_name}
                   </span>
-                  <ChevronDown className="w-4 h-4 text-purple-400" />
+                  <ChevronDown className="w-3.5 h-3.5 text-purple-400 hidden sm:inline" />
                 </button>
 
                 {showDropdown && (
                   <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-purple-100 py-2 z-50 animate-in fade-in slide-in-from-top-2">
                     <div className="px-4 py-3 border-b border-gray-100 bg-purple-50/40 rounded-t-2xl">
-                      <p className="text-[10px] font-black uppercase text-gray-400 mb-0.5">Logged In As</p>
+                      <div className="flex items-center justify-between mb-0.5">
+                        <p className="text-[10px] font-black uppercase text-purple-600 tracking-wider">Logged In As</p>
+                        <span className="text-[9px] font-extrabold px-2 py-0.5 rounded-full bg-purple-100 text-[#2E0854] uppercase tracking-wider">
+                          {currentUser.role}
+                        </span>
+                      </div>
                       <p className="text-xs font-bold text-navy-950 truncate">{currentUser.full_name}</p>
                       <p className="text-[11px] text-gray-400 truncate">{currentUser.email}</p>
                     </div>
 
-                    {currentUser.role === 'receptionist' && (
-                      <div className="py-1">
+                    <div className="py-1">
+                      {/* Guest Navigation Only */}
+                      {currentUser.role === 'guest' && (
+                        <>
+                          <Link
+                            to="/dashboard"
+                            onClick={() => setShowDropdown(false)}
+                            className="flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-[#2E0854] hover:bg-purple-50 transition-colors"
+                          >
+                            <LayoutDashboard className="w-4 h-4 text-purple-700" />
+                            <span>Guest Control Center</span>
+                          </Link>
+                          <Link
+                            to="/dashboard/bookings"
+                            onClick={() => setShowDropdown(false)}
+                            className="flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-purple-50 transition-colors"
+                          >
+                            <Calendar className="w-4 h-4 text-purple-600" />
+                            <span>My Bookings</span>
+                          </Link>
+                          <Link
+                            to="/dashboard/favorites"
+                            onClick={() => setShowDropdown(false)}
+                            className="flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-purple-50 transition-colors"
+                          >
+                            <Heart className="w-4 h-4 text-rose-500" />
+                            <span>Saved Favorites</span>
+                          </Link>
+                        </>
+                      )}
+
+                      {/* Receptionist Desk */}
+                      {currentUser.role === 'receptionist' && (
                         <Link
                           to="/reception"
                           onClick={() => setShowDropdown(false)}
@@ -199,21 +246,52 @@ export const Navbar: React.FC<NavbarProps> = ({
                           <UserCheck className="w-4 h-4 text-emerald-600" />
                           <span>Reception Desk</span>
                         </Link>
-                      </div>
-                    )}
+                      )}
 
-                    {currentUser.role === 'admin' && (
-                      <div className="py-1">
-                        <Link
-                          to="/admin?tab=bookings"
-                          onClick={() => setShowDropdown(false)}
-                          className="flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-[#2E0854] hover:bg-purple-50 transition-colors"
-                        >
-                          <ShieldCheck className="w-4 h-4 text-purple-700" />
-                          <span>Executive Admin Console</span>
-                        </Link>
-                      </div>
-                    )}
+                      {/* Manager Console */}
+                      {currentUser.role === 'manager' && (
+                        <>
+                          <Link
+                            to="/manager"
+                            onClick={() => setShowDropdown(false)}
+                            className="flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-amber-800 hover:bg-amber-50 transition-colors"
+                          >
+                            <Briefcase className="w-4 h-4 text-amber-600" />
+                            <span>Manager Console</span>
+                          </Link>
+                          <Link
+                            to="/reception"
+                            onClick={() => setShowDropdown(false)}
+                            className="flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50 transition-colors"
+                          >
+                            <UserCheck className="w-4 h-4 text-emerald-600" />
+                            <span>Front Desk Overview</span>
+                          </Link>
+                        </>
+                      )}
+
+                      {/* Admin Console & Settings */}
+                      {currentUser.role === 'admin' && (
+                        <>
+                          <Link
+                            to="/admin?tab=bookings"
+                            onClick={() => setShowDropdown(false)}
+                            className="flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-[#2E0854] hover:bg-purple-50 transition-colors"
+                          >
+                            <ShieldCheck className="w-4 h-4 text-purple-700" />
+                            <span>Executive Admin Console</span>
+                          </Link>
+                          <Link
+                            to="/admin?tab=staff"
+                            onClick={() => setShowDropdown(false)}
+                            className="flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-[#2E0854] hover:bg-purple-50 transition-colors"
+                          >
+                            <Users className="w-4 h-4 text-purple-700" />
+                            <span>Staff & Access Control</span>
+                          </Link>
+                        </>
+                      )}
+                    </div>
 
                     <div className="border-t border-gray-100 pt-1 mt-1">
                       <button
@@ -230,18 +308,18 @@ export const Navbar: React.FC<NavbarProps> = ({
                   </div>
                 )}
               </div>
-            ) : null}
+            )}
 
             {/* Hamburger Icon Button (Mobile Only: md:hidden) */}
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
               aria-label="Toggle Menu"
-              className="md:hidden p-2 sm:p-2.5 rounded-full text-[#2E0854] hover:bg-purple-50 active:scale-95 transition-all flex items-center justify-center border border-purple-100/80 bg-purple-50/30"
+              className="md:hidden p-2 sm:p-2.5 rounded-full text-[#2E0854] hover:bg-purple-50 active:scale-95 transition-all flex items-center justify-center border border-purple-100/80 bg-purple-50/30 flex-shrink-0"
             >
               {isMobileMenuOpen ? (
-                <X className="w-5 h-5 sm:w-6 sm:h-6 text-[#2E0854]" />
+                <X className="w-5 h-5 text-[#2E0854]" />
               ) : (
-                <Menu className="w-5 h-5 sm:w-6 sm:h-6 text-[#2E0854]" />
+                <Menu className="w-5 h-5 text-[#2E0854]" />
               )}
             </button>
 
@@ -304,11 +382,11 @@ export const Navbar: React.FC<NavbarProps> = ({
               )}
 
               {/* Log In & Sign Up Action Cards */}
-              {(!currentUser || currentUser.role === 'guest') ? (
+              {!currentUser ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                   <button
                     onClick={() => handleOpenAuth('login')}
-                    className="flex items-center justify-center gap-3 p-3.5 rounded-2xl border-2 border-purple-200 bg-white hover:bg-purple-50 text-[#2E0854] font-black text-sm transition-all shadow-sm group"
+                    className="flex items-center justify-center gap-3 p-3.5 rounded-2xl border-2 border-purple-200 bg-white hover:bg-purple-50 text-[#2E0854] font-black text-sm transition-all shadow-sm group cursor-pointer"
                   >
                     <LogIn className="w-5 h-5 text-purple-600 group-hover:scale-110 transition-transform" />
                     <span>Log In to Account</span>
@@ -316,7 +394,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
                   <button
                     onClick={() => handleOpenAuth('signup')}
-                    className="flex items-center justify-center gap-3 p-3.5 rounded-2xl bg-[#2E0854] hover:bg-purple-900 text-white font-black text-sm transition-all shadow-md active:scale-98 group"
+                    className="flex items-center justify-center gap-3 p-3.5 rounded-2xl bg-[#2E0854] hover:bg-purple-900 text-white font-black text-sm transition-all shadow-md active:scale-98 group cursor-pointer"
                   >
                     <UserPlus className="w-5 h-5 text-amber-300 group-hover:scale-110 transition-transform" />
                     <span>Create New Account</span>
@@ -334,14 +412,45 @@ export const Navbar: React.FC<NavbarProps> = ({
                     </div>
                   </div>
 
-                  <Link
-                    to="/dashboard"
-                    onClick={() => setIsMobileMenuOpen(false)}
-                    className="px-3.5 py-2 rounded-xl bg-[#2E0854] text-white font-black text-xs hover:bg-purple-900 transition-all flex items-center gap-1.5"
-                  >
-                    <LayoutDashboard className="w-3.5 h-3.5" />
-                    <span>Dashboard</span>
-                  </Link>
+                  <div className="flex items-center gap-2">
+                    <Link
+                      to={
+                        currentUser.role === 'admin'
+                          ? '/admin'
+                          : currentUser.role === 'manager'
+                          ? '/manager'
+                          : currentUser.role === 'receptionist'
+                          ? '/reception'
+                          : '/dashboard'
+                      }
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="px-3.5 py-2 rounded-xl bg-[#2E0854] text-white font-black text-xs hover:bg-purple-900 transition-all flex items-center gap-1.5"
+                    >
+                      {currentUser.role === 'admin' && <ShieldCheck className="w-3.5 h-3.5" />}
+                      {currentUser.role === 'manager' && <Briefcase className="w-3.5 h-3.5" />}
+                      {currentUser.role === 'receptionist' && <UserCheck className="w-3.5 h-3.5" />}
+                      {currentUser.role === 'guest' && <LayoutDashboard className="w-3.5 h-3.5" />}
+                      <span>
+                        {currentUser.role === 'admin'
+                          ? 'Admin'
+                          : currentUser.role === 'manager'
+                          ? 'Console'
+                          : currentUser.role === 'receptionist'
+                          ? 'Desk'
+                          : 'Dashboard'}
+                      </span>
+                    </Link>
+                    <button
+                      onClick={() => {
+                        setIsMobileMenuOpen(false);
+                        onLogout();
+                      }}
+                      className="p-2 rounded-xl text-rose-600 hover:bg-rose-50 transition-colors"
+                      title="Log out"
+                    >
+                      <LogOut className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               )}
 

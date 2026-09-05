@@ -6,6 +6,7 @@ import { ListingGrid } from '../components/listings/ListingGrid';
 import { LeafletMapView } from '../components/map/LeafletMapView';
 import { Property, FilterState, VerticalType } from '../types';
 import { dataService } from '../lib/supabase';
+import { useRealtimeSync } from '../lib/realtimeSync';
 import { Shield, Compass, Award } from 'lucide-react';
 
 interface HomePageProps {
@@ -28,6 +29,11 @@ export const HomePage: React.FC<HomePageProps> = ({ activeVertical, onVerticalCh
     maxPrice: 2000,
     selectedAmenities: [],
     vertical: activeVertical
+  });
+
+  // Subscribe to live database updates across all devices
+  useRealtimeSync(['properties'], () => {
+    loadProperties();
   });
 
   useEffect(() => {

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { dataService } from '../../lib/supabase';
+import { useRealtimeSync } from '../../lib/realtimeSync';
 import { Conversation, Message } from '../../types';
 import { Send, MessageSquare, ShieldCheck } from 'lucide-react';
 
@@ -8,6 +9,16 @@ export const MyMessagesPage: React.FC = () => {
   const [activeConvId, setActiveConvId] = useState<string>('conv-1');
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
+
+  const loadMessages = () => {
+    if (activeConvId) {
+      dataService.getMessages(activeConvId).then(setMessages);
+    }
+  };
+
+  useRealtimeSync(['messages'], () => {
+    loadMessages();
+  });
 
   useEffect(() => {
     dataService.getConversations().then((convs) => {
@@ -19,9 +30,7 @@ export const MyMessagesPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (activeConvId) {
-      dataService.getMessages(activeConvId).then(setMessages);
-    }
+    loadMessages();
   }, [activeConvId]);
 
   const handleSend = async (e: React.FormEvent) => {

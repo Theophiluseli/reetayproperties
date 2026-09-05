@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Property, Review } from '../types';
 import { dataService } from '../lib/supabase';
+import { useRealtimeSync } from '../lib/realtimeSync';
 import { LeafletMapView } from '../components/map/LeafletMapView';
 import { FeatureIcon } from '../components/common/FeatureIcon';
 import { ShareModal } from '../components/common/ShareModal';
@@ -76,24 +77,29 @@ export const PropertyDetailPage: React.FC = () => {
     return dateStr;
   };
 
-  useEffect(() => {
+  const loadPropertyData = () => {
     if (id) {
       dataService.getPropertyById(id).then((p) => {
-        setProperty(p);
+        if (p) setProperty(p);
         setLoading(false);
       });
       dataService.getReviews().then((revs) => {
         setReviews(revs.filter((r) => r.property_id === id));
       });
+      if (checkIn && checkOut) {
+        dataService.checkDateOverlap(id, checkIn, checkOut).then((overlap) => {
+          setIsDateBlocked(overlap);
+        });
+      }
     }
-  }, [id]);
+  };
+
+  useRealtimeSync(['properties', 'bookings', 'reviews'], () => {
+    loadPropertyData();
+  });
 
   useEffect(() => {
-    if (id && checkIn && checkOut) {
-      dataService.checkDateOverlap(id, checkIn, checkOut).then((overlap) => {
-        setIsDateBlocked(overlap);
-      });
-    }
+    loadPropertyData();
   }, [id, checkIn, checkOut]);
 
   if (loading || !property) {

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { dataService } from '../../lib/supabase';
+import { useRealtimeSync } from '../../lib/realtimeSync';
 import { Property, Booking, User, VerticalType } from '../../types';
 import { IncomingReservationsDesk } from '../../components/dashboard/IncomingReservationsDesk';
 import {
@@ -100,6 +101,10 @@ export const ManagerDashboardPage: React.FC<ManagerDashboardPageProps> = ({ mana
   const [agreedPrice, setAgreedPrice] = useState(1200);
   const [specialNotes, setSpecialNotes] = useState('VIP reservation made by Operations Manager.');
   const [errorMessage, setErrorMessage] = useState('');
+
+  useRealtimeSync(['properties', 'bookings', 'incident_reports', 'shift_handovers'], () => {
+    loadData();
+  });
 
   useEffect(() => {
     loadData();

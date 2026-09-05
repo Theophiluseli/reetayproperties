@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { dataService } from '../../lib/supabase';
+import { useRealtimeSync } from '../../lib/realtimeSync';
 import { Booking } from '../../types';
 import { EmptyState } from '../../components/common/EmptyState';
 import { Bed, Calendar, MapPin, ExternalLink, FileText } from 'lucide-react';
@@ -18,16 +19,24 @@ export const MyBookingsPage: React.FC = () => {
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [showModal, setShowModal] = useState(false);
 
+  const loadBookings = () => {
+    dataService.getBookings().then((b) => {
+      setBookings(b);
+      setLoading(false);
+    });
+  };
+
+  useRealtimeSync(['bookings'], () => {
+    loadBookings();
+  });
+
   useEffect(() => {
     if (tabParam === 'previous') setActiveTab('previous');
     else if (tabParam === 'current') setActiveTab('current');
   }, [tabParam]);
 
   useEffect(() => {
-    dataService.getBookings().then((b) => {
-      setBookings(b);
-      setLoading(false);
-    });
+    loadBookings();
   }, []);
 
   const handleOpenBookingDetails = (booking: Booking) => {

@@ -11,12 +11,30 @@ export interface User {
 }
 
 export interface StaffPermissions {
+  // Front Desk Operations
   can_register_walkins: boolean;
+  can_checkin_guests: boolean;
   can_checkout_guests: boolean;
+  can_update_room_status: boolean;
+
+  // Reservations & Pricing Control
   can_edit_booking_status: boolean;
+  can_cancel_bookings: boolean;
+  can_delete_bookings: boolean;
+  can_override_pricing: boolean;
+
+  // Financial Oversight & Reports
   can_view_financials: boolean;
+  can_view_revenue_reports: boolean;
+  can_process_refunds: boolean;
+
+  // Inventory & Listings
+  can_manage_inventory: boolean;
+  can_lock_calendar: boolean;
+
+  // Communications & Incident Management
   can_send_messages: boolean;
-  can_delete_bookings?: boolean;
+  can_settle_incidents: boolean;
 }
 
 export interface StaffAccount {
@@ -28,8 +46,23 @@ export interface StaffAccount {
   phone: string;
   avatar_url?: string;
   created_at: string;
-  status: 'active' | 'inactive';
+  status: 'active' | 'suspended' | 'inactive';
   permissions?: StaffPermissions;
+  last_login?: string;
+  last_password_reset?: string;
+  notes?: string;
+}
+
+export interface DatabaseHealthInfo {
+  status: 'connected' | 'degraded' | 'offline';
+  provider: string;
+  supabaseUrl: string;
+  latencyMs: number;
+  usersCount: number;
+  bookingsCount: number;
+  propertiesCount: number;
+  incidentReportsCount: number;
+  lastSyncTimestamp: string;
 }
 
 export interface ShiftHandover {

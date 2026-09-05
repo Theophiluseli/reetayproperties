@@ -20,6 +20,7 @@ import { StatCard } from '../../components/dashboard/StatCard';
 import { QuickActionCard } from '../../components/dashboard/QuickActionCard';
 import { EmptyState } from '../../components/common/EmptyState';
 import { dataService } from '../../lib/supabase';
+import { useRealtimeSync } from '../../lib/realtimeSync';
 import { Booking, Conversation, Review, Property, User } from '../../types';
 
 import { BookingDetailsModal } from '../../components/dashboard/BookingDetailsModal';
@@ -38,6 +39,10 @@ export const DashboardOverviewPage: React.FC<DashboardOverviewPageProps> = ({ us
   const [loading, setLoading] = useState(true);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [showModal, setShowModal] = useState(false);
+
+  useRealtimeSync(['properties', 'bookings', 'reviews', 'favorites'], () => {
+    loadDashboardData();
+  });
 
   useEffect(() => {
     loadDashboardData();
