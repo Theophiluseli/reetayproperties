@@ -139,11 +139,12 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ adminUse
   const [propPrice, setPropPrice] = useState(300);
   const [propUnitLabel, setPropUnitLabel] = useState('Starting from');
   const [propVertical, setPropVertical] = useState<VerticalType>('stays');
-  const [propBadge, setPropBadge] = useState('Summer Deals');
+  const [propBadge, setPropBadge] = useState('');
   const [coverImage, setCoverImage] = useState('https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&w=1000&q=80');
   const [galleryImages, setGalleryImages] = useState<string[]>([]);
   const [newGalleryUrlInput, setNewGalleryUrlInput] = useState('');
   const [propDescription, setPropDescription] = useState('');
+  const [propStatus, setPropStatus] = useState<'published' | 'draft'>('published');
 
   // Car specific state
   const [propFuelType, setPropFuelType] = useState<'Petrol' | 'Diesel' | 'Hybrid' | 'Electric'>('Petrol');
@@ -532,7 +533,7 @@ Password: ${staff.password || 'staff123'}`;
         ? 'VIP local experience package with professional tour guide.'
         : 'Luxury serviced residence with full amenities, 24/7 power backup, and pool access.'
     );
-    setPropBadge('Summer Deals');
+    setPropBadge('');
     setPropFuelType('Petrol');
     setPropTransmission('Automatic');
     setPropVehicleType('SUV');
@@ -549,6 +550,7 @@ Password: ${staff.password || 'staff123'}`;
         ? ['Private Tour Guide', 'Refreshments Included', 'VIP Shuttle Transport']
         : ['WiFi', 'Air-condition', 'Fully Equipped Kitchen', 'Swimming Pool', '24/7 Security']
     );
+    setPropStatus('published');
     setShowPropertyModal(true);
   };
 
@@ -564,7 +566,8 @@ Password: ${staff.password || 'staff123'}`;
     setGalleryImages(prop.images.slice(1) || []);
     setNewGalleryUrlInput('');
     setPropDescription(prop.description);
-    setPropBadge(prop.badge || 'Summer Deals');
+    setPropBadge(prop.badge || '');
+    setPropStatus(prop.status || 'published');
     setPropFuelType(prop.fuel_type || 'Petrol');
     setPropTransmission(prop.transmission || 'Automatic');
     setPropVehicleType(prop.vehicle_type || 'SUV');
@@ -585,8 +588,9 @@ Password: ${staff.password || 'staff123'}`;
       title: propTitle || 'Luxury Listing',
       description: propDescription || 'Luxury platform listing.',
       vertical: propVertical,
-      price_per_night: propPrice,
+      price_per_night: Number(propPrice),
       price_unit_label: propUnitLabel,
+      status: propStatus,
       location: {
         city: propCity,
         area: propArea,
@@ -594,10 +598,10 @@ Password: ${staff.password || 'staff123'}`;
         lat: 5.6037,
         lng: -0.1870
       },
-      max_guests: propMaxGuests,
-      bedrooms: propVertical === 'stays' ? propBedrooms : 0,
-      beds: propVertical === 'stays' ? propBeds : 0,
-      bathrooms: propVertical === 'stays' ? propBathrooms : 0,
+      max_guests: Number(propMaxGuests),
+      bedrooms: propVertical === 'stays' ? Number(propBedrooms) : 0,
+      beds: propVertical === 'stays' ? Number(propBeds) : 0,
+      bathrooms: propVertical === 'stays' ? Number(propBathrooms) : 0,
       fuel_type: propVertical === 'cars' ? propFuelType : undefined,
       transmission: propVertical === 'cars' ? propTransmission : undefined,
       vehicle_type: propVertical === 'cars' ? propVehicleType : undefined,
@@ -2085,16 +2089,48 @@ Password: ${staff.password || 'staff123'}`;
                 </div>
               </div>
 
-              {/* Badge Tag */}
-              <div>
-                <label className="text-[10px] uppercase font-bold text-gray-400 block mb-1">Promotional Badge Tag</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Summer Deals"
-                  value={propBadge}
-                  onChange={(e) => setPropBadge(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-navy-950 outline-none"
-                />
+              {/* Status & Badge Tag */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] uppercase font-bold text-gray-400 block mb-1">Listing Visibility Status</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPropStatus('published')}
+                      className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                        propStatus === 'published'
+                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                          : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      <span className="w-2 h-2 rounded-full bg-emerald-300"></span>
+                      <span>Published</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPropStatus('draft')}
+                      className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                        propStatus === 'draft'
+                          ? 'bg-navy-950 text-white border-navy-950 shadow-sm'
+                          : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      <span className="w-2 h-2 rounded-full bg-gray-400"></span>
+                      <span>Draft</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[10px] uppercase font-bold text-gray-400 block mb-1">Promotional Badge Tag</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Featured, Luxury, Popular"
+                    value={propBadge}
+                    onChange={(e) => setPropBadge(e.target.value)}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-navy-950 outline-none"
+                  />
+                </div>
               </div>
 
               {/* Cover Image & Gallery Photos Section */}

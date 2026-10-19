@@ -91,7 +91,7 @@ export const ReceptionDashboardPage: React.FC<ReceptionDashboardPageProps> = ({ 
     setBookings(allBookings);
     setShiftHandovers(handovers);
 
-    if (allProps.length > 0 && !selectedPropertyId) {
+    if (allProps.length > 0 && (!selectedPropertyId || !allProps.some(p => p.id === selectedPropertyId))) {
       setSelectedPropertyId(allProps[0].id);
     }
 

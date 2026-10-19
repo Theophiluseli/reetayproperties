@@ -66,7 +66,6 @@ export const MOCK_PROPERTIES: Property[] = [
       'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1000&q=80',
       'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=1000&q=80'
     ],
-    badge: 'Summer Deals',
     status: 'published',
     rating: 4.95,
     review_count: 38,
@@ -274,7 +273,6 @@ export const MOCK_PROPERTIES: Property[] = [
     images: [
       '/images/cars/airport_dropoff.jpg'
     ],
-    badge: 'Summer Deals',
     status: 'published',
     rating: 5.0,
     review_count: 12,
@@ -315,7 +313,6 @@ export const MOCK_PROPERTIES: Property[] = [
     images: [
       '/images/cars/toyota_coaster.jpg'
     ],
-    badge: 'Summer Deals',
     status: 'published',
     rating: 4.9,
     review_count: 8,
@@ -356,7 +353,6 @@ export const MOCK_PROPERTIES: Property[] = [
     images: [
       '/images/cars/hyundai_santa_fe.jpg'
     ],
-    badge: 'Summer Deals',
     status: 'published',
     rating: 4.95,
     review_count: 15,
@@ -397,7 +393,6 @@ export const MOCK_PROPERTIES: Property[] = [
     images: [
       '/images/cars/hyundai_sonata.jpg'
     ],
-    badge: 'Summer Deals',
     status: 'published',
     rating: 4.88,
     review_count: 19,
@@ -438,7 +433,6 @@ export const MOCK_PROPERTIES: Property[] = [
     images: [
       '/images/cars/land_cruiser.jpg'
     ],
-    badge: 'Summer Deals',
     status: 'published',
     rating: 5.0,
     review_count: 32,
@@ -479,7 +473,6 @@ export const MOCK_PROPERTIES: Property[] = [
     images: [
       '/images/cars/toyota_yaris.jpg'
     ],
-    badge: 'Summer Deals',
     status: 'published',
     rating: 4.85,
     review_count: 14,
@@ -520,7 +513,6 @@ export const MOCK_PROPERTIES: Property[] = [
     images: [
       '/images/cars/mitsubishi_eclipse.jpg'
     ],
-    badge: 'Summer Deals',
     status: 'published',
     rating: 4.92,
     review_count: 11,
@@ -561,7 +553,6 @@ export const MOCK_PROPERTIES: Property[] = [
     images: [
       '/images/cars/toyota_corolla.jpg'
     ],
-    badge: 'Summer Deals',
     status: 'published',
     rating: 4.97,
     review_count: 22,
@@ -602,7 +593,6 @@ export const MOCK_PROPERTIES: Property[] = [
     images: [
       '/images/cars/toyota_highlander.jpg'
     ],
-    badge: 'Summer Deals',
     status: 'published',
     rating: 5.0,
     review_count: 1,
@@ -643,7 +633,6 @@ export const MOCK_PROPERTIES: Property[] = [
     images: [
       '/images/cars/toyota_hiace_van.jpg'
     ],
-    badge: 'Summer Deals',
     status: 'published',
     rating: 4.95,
     review_count: 18,

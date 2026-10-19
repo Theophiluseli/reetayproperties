@@ -101,13 +101,6 @@ export const ListingCard: React.FC<ListingCardProps> = ({ property }) => {
               <Heart className={`w-4 h-4 ${isFavorite ? 'fill-rose-500 text-rose-500' : 'text-gray-700'}`} />
             </button>
           </div>
-
-          {/* Bottom-Left Badge Pill */}
-          <div className="absolute bottom-4 left-4 pointer-events-none z-10">
-            <span className="px-3.5 py-1.5 rounded-xl text-xs font-black tracking-wide bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md border border-white/20">
-              {property.badge || 'Summer Deals'}
-            </span>
-          </div>
         </div>
 
         {/* Content Area */}

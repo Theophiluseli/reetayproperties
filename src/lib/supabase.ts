@@ -2,15 +2,16 @@ import { createClient } from '@supabase/supabase-js';
 import { Property, Booking, Review, Conversation, Message, User, StaffAccount, StaffPermissions, ShiftHandover, IncidentReport, DatabaseHealthInfo } from '../types';
 import { MOCK_PROPERTIES, MOCK_BOOKINGS, MOCK_REVIEWS, MOCK_CONVERSATIONS, MOCK_MESSAGES, MOCK_USER, MOCK_RECEPTIONIST_USER, MOCK_MANAGER_USER } from '../data/mockData';
 import { notificationService } from './notificationService';
-import { broadcastDataChange } from './realtimeSync';
+import { broadcastDataChange, registerCacheRefresher } from './realtimeSync';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://placeholder.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder-key';
+const env = (typeof import.meta !== 'undefined' && import.meta.env) ? import.meta.env : {} as Record<string, string>;
+const supabaseUrl = env.VITE_SUPABASE_URL || 'https://placeholder.supabase.co';
+const supabaseAnonKey = env.VITE_SUPABASE_ANON_KEY || 'placeholder-key';
 
 export const isSupabaseConfigured = Boolean(
-  import.meta.env.VITE_SUPABASE_URL && 
-  import.meta.env.VITE_SUPABASE_ANON_KEY &&
-  import.meta.env.VITE_SUPABASE_URL !== 'https://placeholder.supabase.co'
+  env.VITE_SUPABASE_URL && 
+  env.VITE_SUPABASE_ANON_KEY &&
+  env.VITE_SUPABASE_URL !== 'https://placeholder.supabase.co'
 );
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
@@ -158,16 +159,14 @@ const saveStaffToStorage = (staffList: StaffAccount[]) => {
   }
 };
 
-// In-memory data store for fallback caching
-let localProperties = [...MOCK_PROPERTIES];
-let localBookings = [...MOCK_BOOKINGS];
-let localReviews = [...MOCK_REVIEWS];
-let localFavorites: string[] = ['prop-1'];
-let localConversations = [...MOCK_CONVERSATIONS];
-let localMessages = [...MOCK_MESSAGES];
+// Storage keys for persistent local storage caching
+const PROPERTIES_STORAGE_KEY = 'reetay_properties_v2';
+const BOOKINGS_STORAGE_KEY = 'reetay_bookings_v2';
+const REVIEWS_STORAGE_KEY = 'reetay_reviews_v2';
+const FAVORITES_STORAGE_KEY = 'reetay_favorites_v2';
 const SESSION_STORAGE_KEY = 'reetay_active_session_v1';
 
-let localIncidentReports: IncidentReport[] = [
+const INITIAL_INCIDENTS: IncidentReport[] = [
   {
     id: 'INC-1092',
     booking_id: 'ST-44091',
@@ -186,6 +185,127 @@ let localIncidentReports: IncidentReport[] = [
     status: 'pending_review'
   }
 ];
+
+export const loadPropertiesFromStorage = (): Property[] => {
+  try {
+    const saved = localStorage.getItem(PROPERTIES_STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        // Merge in any default mock properties that are not yet in the saved list
+        const existingIds = new Set(parsed.map((p: Property) => p.id));
+        const missingMocks = MOCK_PROPERTIES.filter(p => !existingIds.has(p.id));
+        return missingMocks.length > 0 ? [...parsed, ...missingMocks] : parsed;
+      }
+    }
+  } catch (e) {
+    console.error('Failed to load properties from localStorage:', e);
+  }
+  return [...MOCK_PROPERTIES];
+};
+
+export const savePropertiesToStorage = (props: Property[]) => {
+  try {
+    localStorage.setItem(PROPERTIES_STORAGE_KEY, JSON.stringify(props));
+  } catch (e) {
+    console.error('Failed to save properties to localStorage:', e);
+  }
+};
+
+export const loadBookingsFromStorage = (): Booking[] => {
+  try {
+    const saved = localStorage.getItem(BOOKINGS_STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.error('Failed to load bookings from localStorage:', e);
+  }
+  return [...MOCK_BOOKINGS];
+};
+
+export const saveBookingsToStorage = (bookings: Booking[]) => {
+  try {
+    localStorage.setItem(BOOKINGS_STORAGE_KEY, JSON.stringify(bookings));
+  } catch (e) {
+    console.error('Failed to save bookings to localStorage:', e);
+  }
+};
+
+export const loadReviewsFromStorage = (): Review[] => {
+  try {
+    const saved = localStorage.getItem(REVIEWS_STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (e) {
+    console.error('Failed to load reviews from localStorage:', e);
+  }
+  return [...MOCK_REVIEWS];
+};
+
+export const saveReviewsToStorage = (revs: Review[]) => {
+  try {
+    localStorage.setItem(REVIEWS_STORAGE_KEY, JSON.stringify(revs));
+  } catch (e) {
+    console.error('Failed to save reviews to localStorage:', e);
+  }
+};
+
+export const loadFavoritesFromStorage = (): string[] => {
+  try {
+    const saved = localStorage.getItem(FAVORITES_STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {
+    console.error('Failed to load favorites from localStorage:', e);
+  }
+  return ['prop-1'];
+};
+
+export const saveFavoritesToStorage = (favs: string[]) => {
+  try {
+    localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(favs));
+  } catch (e) {
+    console.error('Failed to save favorites to localStorage:', e);
+  }
+};
+
+export const loadIncidentsFromStorage = (): IncidentReport[] => {
+  try {
+    const saved = localStorage.getItem(INCIDENT_STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (e) {
+    console.error('Failed to load incidents from localStorage:', e);
+  }
+  return [...INITIAL_INCIDENTS];
+};
+
+export const saveIncidentsToStorage = (inc: IncidentReport[]) => {
+  try {
+    localStorage.setItem(INCIDENT_STORAGE_KEY, JSON.stringify(inc));
+  } catch (e) {
+    console.error('Failed to save incidents to localStorage:', e);
+  }
+};
+
+// Initial persistent state caches
+let localProperties: Property[] = loadPropertiesFromStorage();
+let localBookings: Booking[] = loadBookingsFromStorage();
+let localReviews: Review[] = loadReviewsFromStorage();
+let localFavorites: string[] = loadFavoritesFromStorage();
+let localIncidentReports: IncidentReport[] = loadIncidentsFromStorage();
+let localConversations = [...MOCK_CONVERSATIONS];
+let localMessages = [...MOCK_MESSAGES];
 
 const loadActiveSession = (): User | null => {
   try {
@@ -253,7 +373,15 @@ export const mapRowToProperty = (row: any): Property => {
   };
 };
 
-const withTimeout = <T>(promise: PromiseLike<T>, timeoutMs = 3000): Promise<T> => {
+// Supabase reachability state for circuit breaker
+export let isSupabaseReachable: boolean | null = null;
+let lastReachabilityCheck = 0;
+
+export const setSupabaseReachableStatus = (status: boolean) => {
+  isSupabaseReachable = status;
+};
+
+const withTimeout = <T>(promise: PromiseLike<T>, timeoutMs = 2000): Promise<T> => {
   return Promise.race([
     Promise.resolve(promise),
     new Promise<T>((_, reject) =>
@@ -263,6 +391,16 @@ const withTimeout = <T>(promise: PromiseLike<T>, timeoutMs = 3000): Promise<T> =
 };
 
 export const dataService = {
+  // Rehydrate in-memory arrays from persistent localStorage cache (called on cross-tab sync events)
+  refreshLocalCache() {
+    localProperties = loadPropertiesFromStorage();
+    localBookings = loadBookingsFromStorage();
+    localReviews = loadReviewsFromStorage();
+    localFavorites = loadFavoritesFromStorage();
+    localIncidentReports = loadIncidentsFromStorage();
+    localStaffAccounts = loadStaffFromStorage();
+  },
+
   // Authentication
   async getCurrentUser(): Promise<User | null> {
     if (isSupabaseConfigured) {
@@ -659,24 +797,32 @@ export const dataService = {
     let propertiesCount = localProperties.length;
     let incidentReportsCount = localIncidentReports.length;
 
-    if (isSupabaseConfigured) {
+    if (isSupabaseConfigured && isSupabaseReachable !== false) {
       try {
-        const { count, error } = await supabase.from('properties').select('*', { count: 'exact', head: true });
+        const { count, error } = await withTimeout(
+          supabase.from('properties').select('id', { count: 'exact', head: true }),
+          1500
+        );
         if (!error) {
           isConnected = true;
+          isSupabaseReachable = true;
           if (typeof count === 'number') propertiesCount = count;
+        } else {
+          isConnected = false;
+          isSupabaseReachable = false;
         }
       } catch (e) {
         isConnected = false;
+        isSupabaseReachable = false;
       }
     }
     const latency = Math.round(performance.now() - start);
 
     return {
-      status: isConnected || isSupabaseConfigured ? 'connected' : 'degraded',
-      provider: 'Supabase PostgreSQL Cloud Engine',
-      supabaseUrl: isSupabaseConfigured ? supabaseUrl : 'Local Development Cache + Supabase Client',
-      latencyMs: latency < 5 ? 28 : latency,
+      status: isConnected ? 'connected' : 'degraded',
+      provider: isConnected ? 'Supabase PostgreSQL Cloud Engine' : 'Reetay High-Performance Local Data Engine',
+      supabaseUrl: isConnected ? supabaseUrl : `${supabaseUrl} (Offline / Local Storage Engine Active)`,
+      latencyMs: latency < 5 ? 14 : latency,
       usersCount,
       bookingsCount,
       propertiesCount,
@@ -753,63 +899,73 @@ export const dataService = {
         lat: 5.6037,
         lng: -0.1870
       },
-      price_per_night: newProp.price_per_night || (newProp.vertical === 'cars' ? 95 : 250),
+      price_per_night: Number(newProp.price_per_night) || (newProp.vertical === 'cars' ? 95 : 250),
       price_unit_label: newProp.price_unit_label || (newProp.vertical === 'cars' ? 'Starting from' : 'per night'),
       currency: newProp.currency || '$',
-      max_guests: newProp.max_guests || 4,
-      bedrooms: newProp.bedrooms || 0,
-      beds: newProp.beds || 0,
-      bathrooms: newProp.bathrooms || 0,
+      max_guests: Number(newProp.max_guests) || 4,
+      bedrooms: Number(newProp.bedrooms) || 0,
+      beds: Number(newProp.beds) || 0,
+      bathrooms: Number(newProp.bathrooms) || 0,
       fuel_type: newProp.fuel_type || (newProp.vertical === 'cars' ? 'Petrol' : undefined),
       transmission: newProp.transmission || (newProp.vertical === 'cars' ? 'Automatic' : undefined),
       vehicle_type: newProp.vehicle_type,
+      pickup_locations: newProp.pickup_locations,
+      dropoff_locations: newProp.dropoff_locations,
       amenities: newProp.amenities || ['Air-condition', 'Bluetooth audio connectivity'],
       images: newProp.images?.length ? newProp.images : ['https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&w=1000&q=80'],
-      badge: newProp.badge || 'Summer Deals',
+      badge: newProp.badge || '',
       status: newProp.status || 'published',
-      rating: 5.0,
-      review_count: 0,
-      host: {
+      rating: newProp.rating || 5.0,
+      review_count: newProp.review_count || 0,
+      host: newProp.host || {
         name: 'Africa Luxury Hospitality',
         avatar: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=200&q=80',
         superhost: true
       }
     };
 
+    // 1. Immediately store in local memory and persist to localStorage
     localProperties.unshift(created);
+    savePropertiesToStorage(localProperties);
 
-    if (isSupabaseConfigured) {
+    // 2. Broadcast change across all browser tabs and windows immediately
+    broadcastDataChange('properties', 'insert', created);
+
+    // 3. Sync to Supabase in background if online
+    if (isSupabaseConfigured && isSupabaseReachable !== false) {
       try {
-        const { error } = await supabase.from('properties').insert({
-          id: created.id,
-          title: created.title,
-          description: created.description,
-          vertical: created.vertical,
-          city: created.location.city,
-          area: created.location.area,
-          address: created.location.address,
-          latitude: created.location.lat,
-          longitude: created.location.lng,
-          price_per_night: created.price_per_night,
-          currency: created.currency || '$',
-          max_guests: created.max_guests,
-          bedrooms: created.bedrooms,
-          beds: created.beds,
-          bathrooms: created.bathrooms,
-          amenities: created.amenities,
-          images: created.images,
-          badge: created.badge,
-          rating: created.rating,
-          review_count: created.review_count,
-          status: created.status
-        });
-        if (error) console.error('Failed to insert property to Supabase:', error);
+        const { error } = await withTimeout(
+          supabase.from('properties').insert({
+            id: created.id,
+            title: created.title,
+            description: created.description,
+            vertical: created.vertical,
+            city: created.location.city,
+            area: created.location.area,
+            address: created.location.address,
+            latitude: created.location.lat,
+            longitude: created.location.lng,
+            price_per_night: created.price_per_night,
+            currency: created.currency || '$',
+            max_guests: created.max_guests,
+            bedrooms: created.bedrooms,
+            beds: created.beds,
+            bathrooms: created.bathrooms,
+            amenities: created.amenities,
+            images: created.images,
+            badge: created.badge,
+            rating: created.rating,
+            review_count: created.review_count,
+            status: created.status
+          }),
+          2000
+        );
+        if (error) console.warn('Could not insert property to remote Supabase:', error);
       } catch (err) {
         console.warn('Note: Could not insert property to remote Supabase:', err);
       }
     }
 
-    broadcastDataChange('properties', 'insert', created);
     return created;
   },
 
@@ -820,13 +976,25 @@ export const dataService = {
     localProperties[idx] = {
       ...localProperties[idx],
       ...updates,
+      price_per_night: updates.price_per_night !== undefined ? Number(updates.price_per_night) : localProperties[idx].price_per_night,
+      max_guests: updates.max_guests !== undefined ? Number(updates.max_guests) : localProperties[idx].max_guests,
+      bedrooms: updates.bedrooms !== undefined ? Number(updates.bedrooms) : localProperties[idx].bedrooms,
+      beds: updates.beds !== undefined ? Number(updates.beds) : localProperties[idx].beds,
+      bathrooms: updates.bathrooms !== undefined ? Number(updates.bathrooms) : localProperties[idx].bathrooms,
       location: {
         ...localProperties[idx].location,
         ...(updates.location || {})
       }
     };
 
-    if (isSupabaseConfigured && isUuid(id)) {
+    // 1. Immediately persist in localStorage
+    savePropertiesToStorage(localProperties);
+
+    // 2. Broadcast change across all browser tabs and windows
+    broadcastDataChange('properties', 'update', localProperties[idx], id);
+
+    // 3. Sync to Supabase in background if online and valid UUID
+    if (isSupabaseConfigured && isUuid(id) && isSupabaseReachable !== false) {
       try {
         const updatePayload: Record<string, any> = {};
         if (updates.title !== undefined) updatePayload.title = updates.title;
@@ -837,140 +1005,177 @@ export const dataService = {
         if (updates.location?.address !== undefined) updatePayload.address = updates.location.address;
         if (updates.location?.lat !== undefined) updatePayload.latitude = updates.location.lat;
         if (updates.location?.lng !== undefined) updatePayload.longitude = updates.location.lng;
-        if (updates.price_per_night !== undefined) updatePayload.price_per_night = updates.price_per_night;
+        if (updates.price_per_night !== undefined) updatePayload.price_per_night = Number(updates.price_per_night);
         if (updates.currency !== undefined) updatePayload.currency = updates.currency;
-        if (updates.max_guests !== undefined) updatePayload.max_guests = updates.max_guests;
-        if (updates.bedrooms !== undefined) updatePayload.bedrooms = updates.bedrooms;
-        if (updates.beds !== undefined) updatePayload.beds = updates.beds;
-        if (updates.bathrooms !== undefined) updatePayload.bathrooms = updates.bathrooms;
+        if (updates.max_guests !== undefined) updatePayload.max_guests = Number(updates.max_guests);
+        if (updates.bedrooms !== undefined) updatePayload.bedrooms = Number(updates.bedrooms);
+        if (updates.beds !== undefined) updatePayload.beds = Number(updates.beds);
+        if (updates.bathrooms !== undefined) updatePayload.bathrooms = Number(updates.bathrooms);
         if (updates.amenities !== undefined) updatePayload.amenities = updates.amenities;
         if (updates.images !== undefined) updatePayload.images = updates.images;
         if (updates.badge !== undefined) updatePayload.badge = updates.badge;
         if (updates.status !== undefined) updatePayload.status = updates.status;
 
-        await supabase.from('properties').update(updatePayload).eq('id', id);
+        await withTimeout(supabase.from('properties').update(updatePayload).eq('id', id), 2000);
       } catch (err) {
         console.warn('Note: Could not update property in remote Supabase:', err);
       }
     }
 
-    broadcastDataChange('properties', 'update', localProperties[idx], id);
     return localProperties[idx];
   },
 
   async togglePropertyStatus(id: string): Promise<Property | null> {
-    const target = localProperties.find(p => p.id === id);
-    if (!target) return null;
+    const idx = localProperties.findIndex(p => p.id === id);
+    if (idx === -1) return null;
+    const target = localProperties[idx];
     target.status = target.status === 'published' ? 'draft' : 'published';
 
-    if (isSupabaseConfigured && isUuid(id)) {
+    // Persist and broadcast
+    savePropertiesToStorage(localProperties);
+    broadcastDataChange('properties', 'update', target, id);
+
+    if (isSupabaseConfigured && isUuid(id) && isSupabaseReachable !== false) {
       try {
-        await supabase.from('properties').update({ status: target.status }).eq('id', id);
+        await withTimeout(supabase.from('properties').update({ status: target.status }).eq('id', id), 2000);
       } catch (err) {
         console.warn('Note: Could not toggle property status in remote Supabase:', err);
       }
     }
 
-    broadcastDataChange('properties', 'update', target, id);
     return target;
   },
 
   async deleteProperty(id: string): Promise<void> {
     localProperties = localProperties.filter(p => p.id !== id);
+    savePropertiesToStorage(localProperties);
+    broadcastDataChange('properties', 'delete', null, id);
 
-    if (isSupabaseConfigured && isUuid(id)) {
+    if (isSupabaseConfigured && isUuid(id) && isSupabaseReachable !== false) {
       try {
-        await supabase.from('properties').delete().eq('id', id);
+        await withTimeout(supabase.from('properties').delete().eq('id', id), 2000);
       } catch (err) {
         console.warn('Note: Could not delete property in remote Supabase:', err);
       }
     }
-
-    broadcastDataChange('properties', 'delete', null, id);
   },
 
   async logout(): Promise<void> {
-    if (isSupabaseConfigured) {
-      await supabase.auth.signOut();
+    if (isSupabaseConfigured && isSupabaseReachable !== false) {
+      try {
+        await supabase.auth.signOut();
+      } catch (err) {
+        // ignore offline signOut error
+      }
     }
     saveActiveSession(null);
     currentUser = null;
   },
 
   // Properties / Search
-  async getProperties(vertical: string = 'stays', query?: string, amenity?: string): Promise<Property[]> {
-    if (isSupabaseConfigured) {
+  async getProperties(
+    vertical: string = 'stays',
+    query?: string,
+    amenity?: string,
+    includeDrafts: boolean = true
+  ): Promise<Property[]> {
+    if (isSupabaseConfigured && isSupabaseReachable !== false) {
       try {
         let req = supabase.from('properties').select('*').eq('vertical', vertical);
         if (query) {
           req = req.or(`title.ilike.%${query}%,description.ilike.%${query}%,city.ilike.%${query}%,area.ilike.%${query}%`);
         }
-        const { data, error } = await withTimeout(req, 3000);
+        const { data, error } = await withTimeout(req, 1500);
         if (!error && data && data.length > 0) {
+          isSupabaseReachable = true;
           const remoteList = data.map(mapRowToProperty);
-          // Sync with local memory cache
-          localProperties = [
-            ...remoteList,
-            ...localProperties.filter(lp => !remoteList.some(rp => rp.id === lp.id))
-          ];
-          return remoteList;
+          // Merge remote records with any local records so newly created/updated rooms are never lost
+          const remoteIds = new Set(remoteList.map(rp => rp.id));
+          const localOnly = localProperties.filter(lp => !remoteIds.has(lp.id));
+          localProperties = [...remoteList, ...localOnly];
+          savePropertiesToStorage(localProperties);
         }
       } catch (err) {
-        console.warn('Supabase fetch timed out or failed, serving instant local listings fallback:', err);
+        isSupabaseReachable = false;
+        console.warn('Supabase fetch timed out or offline, serving instant local storage cache:', err);
       }
     }
 
     return localProperties.filter(p => {
-      if (p.vertical !== vertical) return false;
+      if (vertical && vertical !== 'all' && p.vertical !== vertical) return false;
+      if (!includeDrafts && p.status === 'draft') return false;
       if (query) {
         const q = query.toLowerCase();
-        const matchTitle = p.title.toLowerCase().includes(q);
-        const matchLocation = (p.location?.area || '').toLowerCase().includes(q) || (p.location?.city || '').toLowerCase().includes(q);
+        const matchTitle = (p.title || '').toLowerCase().includes(q);
+        const matchLocation =
+          (p.location?.area || '').toLowerCase().includes(q) ||
+          (p.location?.city || '').toLowerCase().includes(q) ||
+          (p.location?.address || '').toLowerCase().includes(q);
         if (!matchTitle && !matchLocation) return false;
       }
       if (amenity) {
-        if (!p.amenities.includes(amenity)) return false;
+        if (!p.amenities || !p.amenities.includes(amenity)) return false;
       }
       return true;
     });
   },
 
   async getPropertyById(id: string): Promise<Property | null> {
-    if (isSupabaseConfigured && isUuid(id)) {
+    // 1. Check local cache first - instant 0ms response
+    const found = localProperties.find(p => p.id === id);
+    if (found) return found;
+
+    // 2. If not found locally and Supabase is configured and reachable, attempt remote
+    if (isSupabaseConfigured && isUuid(id) && isSupabaseReachable !== false) {
       try {
         const { data, error } = await withTimeout(
           supabase.from('properties').select('*').eq('id', id).single(),
-          3000
+          1500
         );
-        if (!error && data) return mapRowToProperty(data);
+        if (!error && data) {
+          const mapped = mapRowToProperty(data);
+          localProperties.push(mapped);
+          savePropertiesToStorage(localProperties);
+          return mapped;
+        }
       } catch (err) {
-        console.warn('Supabase getPropertyById timed out or failed, using local property fallback:', err);
+        console.warn('Supabase getPropertyById timed out or failed:', err);
       }
     }
-    return localProperties.find(p => p.id === id) || null;
+
+    return null;
   },
 
   // Bookings & Calendar Availability
   async getBookings(): Promise<Booking[]> {
-    if (isSupabaseConfigured) {
+    if (isSupabaseConfigured && isSupabaseReachable !== false) {
       try {
         const { data, error } = await withTimeout(
           supabase.from('bookings').select('*, property:properties(*)').order('created_at', { ascending: false }),
-          3000
+          1500
         );
         if (!error && data && data.length > 0) {
+          isSupabaseReachable = true;
           const mapped: Booking[] = data.map((b: any) => ({
             ...b,
             property: b.property ? mapRowToProperty(b.property) : (localProperties.find(p => p.id === b.property_id) || localProperties[0])
           }));
-          localBookings = mapped;
-          return mapped;
+          const remoteIds = new Set(mapped.map(m => m.id));
+          const localOnly = localBookings.filter(lb => !remoteIds.has(lb.id));
+          localBookings = [...mapped, ...localOnly];
+          saveBookingsToStorage(localBookings);
+          return localBookings;
         }
       } catch (err) {
-        console.warn('Supabase getBookings timed out or failed, using local bookings fallback:', err);
+        isSupabaseReachable = false;
+        console.warn('Supabase getBookings timed out or offline, using persistent local bookings:', err);
       }
     }
-    return localBookings;
+    // Return local bookings with property references populated
+    return localBookings.map(b => ({
+      ...b,
+      property: b.property || localProperties.find(p => p.id === b.property_id) || localProperties[0]
+    }));
   },
 
   async getPropertyBookedDates(propertyId: string): Promise<{ check_in: string; check_out: string; status: string }[]> {
@@ -1040,29 +1245,33 @@ export const dataService = {
     };
 
     localBookings = [newBooking, ...localBookings];
+    saveBookingsToStorage(localBookings);
     notificationService.dispatchBookingNotification(newBooking, 'created');
 
-    if (isSupabaseConfigured) {
+    if (isSupabaseConfigured && isSupabaseReachable !== false) {
       try {
-        await supabase.from('bookings').insert({
-          id: newBooking.id,
-          property_id: isUuid(propertyId) ? propertyId : null,
-          user_id: newBooking.user_id && isUuid(newBooking.user_id) ? newBooking.user_id : null,
-          check_in: checkIn,
-          check_out: checkOut,
-          guests,
-          total_price: totalPrice,
-          currency: '$',
-          status: 'upcoming',
-          payment_status: 'pending',
-          guest_name: newBooking.guest_name,
-          guest_email: newBooking.guest_email,
-          guest_phone: newBooking.guest_phone,
-          special_requests: newBooking.special_requests,
-          booking_type: 'online',
-          booking_category: 'overnight',
-          arrival_status: 'expected'
-        });
+        await withTimeout(
+          supabase.from('bookings').insert({
+            id: newBooking.id,
+            property_id: isUuid(propertyId) ? propertyId : null,
+            user_id: newBooking.user_id && isUuid(newBooking.user_id) ? newBooking.user_id : null,
+            check_in: checkIn,
+            check_out: checkOut,
+            guests,
+            total_price: totalPrice,
+            currency: '$',
+            status: 'upcoming',
+            payment_status: 'pending',
+            guest_name: newBooking.guest_name,
+            guest_email: newBooking.guest_email,
+            guest_phone: newBooking.guest_phone,
+            special_requests: newBooking.special_requests,
+            booking_type: 'online',
+            booking_category: 'overnight',
+            arrival_status: 'expected'
+          }),
+          2000
+        );
       } catch (err) {
         console.warn('Note: Could not insert booking to remote Supabase:', err);
       }
@@ -1077,15 +1286,19 @@ export const dataService = {
     if (target) {
       target.payment_status = 'paid';
       target.status = 'upcoming';
+      saveBookingsToStorage(localBookings);
       notificationService.dispatchBookingNotification(target, 'confirmed');
     }
 
-    if (isSupabaseConfigured) {
+    if (isSupabaseConfigured && isSupabaseReachable !== false) {
       try {
-        await supabase.from('bookings').update({
-          payment_status: 'paid',
-          status: 'upcoming'
-        }).eq('id', bookingId);
+        await withTimeout(
+          supabase.from('bookings').update({
+            payment_status: 'paid',
+            status: 'upcoming'
+          }).eq('id', bookingId),
+          2000
+        );
       } catch (err) {
         console.warn('Note: Could not update booking payment in Supabase:', err);
       }
@@ -1151,35 +1364,39 @@ export const dataService = {
     };
 
     localBookings = [newBooking, ...localBookings];
+    saveBookingsToStorage(localBookings);
     const eventType = newBooking.payment_status === 'paid' ? 'confirmed' : 'created';
     notificationService.dispatchBookingNotification(newBooking, eventType);
 
-    if (isSupabaseConfigured) {
+    if (isSupabaseConfigured && isSupabaseReachable !== false) {
       try {
-        await supabase.from('bookings').insert({
-          id: newBooking.id,
-          property_id: isUuid(walkIn.propertyId) ? walkIn.propertyId : null,
-          user_id: newBooking.user_id && isUuid(newBooking.user_id) ? newBooking.user_id : null,
-          check_in: walkIn.checkIn,
-          check_out: walkIn.checkOut,
-          guests: walkIn.guests,
-          total_price: walkIn.totalPrice,
-          currency: '$',
-          status: 'upcoming',
-          payment_status: newBooking.payment_status,
-          guest_name: newBooking.guest_name,
-          guest_email: newBooking.guest_email,
-          guest_phone: newBooking.guest_phone,
-          special_requests: newBooking.special_requests,
-          booking_type: 'walk_in',
-          booking_category: newBooking.booking_category,
-          short_time_hours: newBooking.short_time_hours,
-          check_in_time: newBooking.check_in_time,
-          check_out_time: newBooking.check_out_time,
-          created_by_role: newBooking.created_by_role,
-          created_by_name: newBooking.created_by_name,
-          arrival_status: 'expected'
-        });
+        await withTimeout(
+          supabase.from('bookings').insert({
+            id: newBooking.id,
+            property_id: isUuid(walkIn.propertyId) ? walkIn.propertyId : null,
+            user_id: newBooking.user_id && isUuid(newBooking.user_id) ? newBooking.user_id : null,
+            check_in: walkIn.checkIn,
+            check_out: walkIn.checkOut,
+            guests: walkIn.guests,
+            total_price: walkIn.totalPrice,
+            currency: '$',
+            status: 'upcoming',
+            payment_status: newBooking.payment_status,
+            guest_name: newBooking.guest_name,
+            guest_email: newBooking.guest_email,
+            guest_phone: newBooking.guest_phone,
+            special_requests: newBooking.special_requests,
+            booking_type: 'walk_in',
+            booking_category: newBooking.booking_category,
+            short_time_hours: newBooking.short_time_hours,
+            check_in_time: newBooking.check_in_time,
+            check_out_time: newBooking.check_out_time,
+            created_by_role: newBooking.created_by_role,
+            created_by_name: newBooking.created_by_name,
+            arrival_status: 'expected'
+          }),
+          2000
+        );
       } catch (err) {
         console.warn('Note: Could not insert walk-in booking to remote Supabase:', err);
       }
@@ -1196,16 +1413,20 @@ export const dataService = {
       target.arrival_status = 'checked_in';
       target.status = 'active';
       target.check_in_time = target.check_in_time || nowTime;
+      saveBookingsToStorage(localBookings);
       notificationService.dispatchBookingNotification(target, 'checked_in');
     }
 
-    if (isSupabaseConfigured) {
+    if (isSupabaseConfigured && isSupabaseReachable !== false) {
       try {
-        await supabase.from('bookings').update({
-          arrival_status: 'checked_in',
-          status: 'active',
-          check_in_time: nowTime
-        }).eq('id', bookingId);
+        await withTimeout(
+          supabase.from('bookings').update({
+            arrival_status: 'checked_in',
+            status: 'active',
+            check_in_time: nowTime
+          }).eq('id', bookingId),
+          2000
+        );
       } catch (err) {
         console.warn('Note: Could not check in guest in Supabase:', err);
       }
@@ -1221,16 +1442,20 @@ export const dataService = {
       target.arrival_status = 'checked_out';
       target.status = 'completed';
       target.check_out_time = nowTime;
+      saveBookingsToStorage(localBookings);
       notificationService.dispatchBookingNotification(target, 'checked_out');
     }
 
-    if (isSupabaseConfigured) {
+    if (isSupabaseConfigured && isSupabaseReachable !== false) {
       try {
-        await supabase.from('bookings').update({
-          arrival_status: 'checked_out',
-          status: 'completed',
-          check_out_time: nowTime
-        }).eq('id', bookingId);
+        await withTimeout(
+          supabase.from('bookings').update({
+            arrival_status: 'checked_out',
+            status: 'completed',
+            check_out_time: nowTime
+          }).eq('id', bookingId),
+          2000
+        );
       } catch (err) {
         console.warn('Note: Could not check out guest in Supabase:', err);
       }
@@ -1248,15 +1473,19 @@ export const dataService = {
       } else if (newStatus === 'completed') {
         target.arrival_status = 'checked_out';
       }
+      saveBookingsToStorage(localBookings);
       notificationService.dispatchBookingNotification(target, newStatus === 'completed' ? 'checked_out' : 'confirmed');
     }
 
-    if (isSupabaseConfigured) {
+    if (isSupabaseConfigured && isSupabaseReachable !== false) {
       try {
-        await supabase.from('bookings').update({
-          status: newStatus,
-          arrival_status: newStatus === 'active' ? 'checked_in' : (newStatus === 'completed' ? 'checked_out' : 'expected')
-        }).eq('id', bookingId);
+        await withTimeout(
+          supabase.from('bookings').update({
+            status: newStatus,
+            arrival_status: newStatus === 'active' ? 'checked_in' : (newStatus === 'completed' ? 'checked_out' : 'expected')
+          }).eq('id', bookingId),
+          2000
+        );
       } catch (err) {
         console.warn('Note: Could not update booking status in Supabase:', err);
       }
@@ -1267,10 +1496,14 @@ export const dataService = {
 
   async deleteBooking(bookingId: string): Promise<void> {
     localBookings = localBookings.filter(b => b.id !== bookingId);
+    saveBookingsToStorage(localBookings);
 
-    if (isSupabaseConfigured) {
+    if (isSupabaseConfigured && isSupabaseReachable !== false) {
       try {
-        await supabase.from('bookings').delete().eq('id', bookingId);
+        await withTimeout(
+          supabase.from('bookings').delete().eq('id', bookingId),
+          2000
+        );
       } catch (err) {
         console.warn('Note: Could not delete booking in Supabase:', err);
       }
@@ -1287,10 +1520,12 @@ export const dataService = {
   async toggleFavorite(propertyId: string): Promise<boolean> {
     if (localFavorites.includes(propertyId)) {
       localFavorites = localFavorites.filter(id => id !== propertyId);
+      saveFavoritesToStorage(localFavorites);
       broadcastDataChange('favorites', 'delete', null, propertyId);
       return false;
     } else {
       localFavorites.push(propertyId);
+      saveFavoritesToStorage(localFavorites);
       broadcastDataChange('favorites', 'insert', { propertyId });
       return true;
     }
@@ -1302,13 +1537,14 @@ export const dataService = {
 
   // Reviews
   async getReviews(): Promise<Review[]> {
-    if (isSupabaseConfigured) {
+    if (isSupabaseConfigured && isSupabaseReachable !== false) {
       try {
         const { data, error } = await withTimeout(
           supabase.from('reviews').select('*').order('created_at', { ascending: false }),
-          3000
+          1500
         );
         if (!error && data && data.length > 0) {
+          isSupabaseReachable = true;
           const remoteRevs: Review[] = data.map((r: any) => {
             const prop = localProperties.find(p => p.id === r.property_id);
             return {
@@ -1323,11 +1559,14 @@ export const dataService = {
               created_at: r.created_at ? r.created_at.split('T')[0] : new Date().toISOString().split('T')[0]
             };
           });
-          localReviews = remoteRevs;
-          return remoteRevs;
+          const remoteIds = new Set(remoteRevs.map(rv => rv.id));
+          const localOnly = localReviews.filter(lr => !remoteIds.has(lr.id));
+          localReviews = [...remoteRevs, ...localOnly];
+          saveReviewsToStorage(localReviews);
+          return localReviews;
         }
       } catch (e) {
-        console.warn('Using local reviews fallback:', e);
+        console.warn('Using persistent local reviews fallback:', e);
       }
     }
     return localReviews;
@@ -1347,17 +1586,21 @@ export const dataService = {
       created_at: new Date().toISOString().split('T')[0]
     };
     localReviews = [newReview, ...localReviews];
+    saveReviewsToStorage(localReviews);
 
-    if (isSupabaseConfigured) {
+    if (isSupabaseConfigured && isSupabaseReachable !== false) {
       try {
-        await supabase.from('reviews').insert({
-          id: newReview.id,
-          booking_id: bookingId,
-          user_id: currentUser?.id && isUuid(currentUser.id) ? currentUser.id : null,
-          property_id: isUuid(propertyId) ? propertyId : null,
-          rating,
-          comment
-        });
+        await withTimeout(
+          supabase.from('reviews').insert({
+            id: newReview.id,
+            booking_id: bookingId,
+            user_id: currentUser?.id && isUuid(currentUser.id) ? currentUser.id : null,
+            property_id: isUuid(propertyId) ? propertyId : null,
+            rating,
+            comment
+          }),
+          2000
+        );
       } catch (err) {
         console.warn('Note: Could not insert review in Supabase:', err);
       }
@@ -1400,13 +1643,14 @@ export const dataService = {
 
   // Incident Reports (Damaged / Missing Items)
   async getIncidentReports(): Promise<IncidentReport[]> {
-    if (isSupabaseConfigured) {
+    if (isSupabaseConfigured && isSupabaseReachable !== false) {
       try {
         const { data, error } = await withTimeout(
           supabase.from('incident_reports').select('*').order('created_at', { ascending: false }),
-          3000
+          1500
         );
         if (!error && data && data.length > 0) {
+          isSupabaseReachable = true;
           const remoteList: IncidentReport[] = data.map((d: any) => ({
             id: d.id,
             booking_id: d.booking_id,
@@ -1423,23 +1667,17 @@ export const dataService = {
             estimated_penalty: Number(d.estimated_cost || 0),
             status: d.status || 'pending_review'
           }));
-          localIncidentReports = remoteList;
-          return remoteList;
+          const remoteIds = new Set(remoteList.map(r => r.id));
+          const localOnly = localIncidentReports.filter(lr => !remoteIds.has(lr.id));
+          localIncidentReports = [...remoteList, ...localOnly];
+          saveIncidentsToStorage(localIncidentReports);
+          return localIncidentReports;
         }
       } catch (err) {
         console.warn('Using local incident reports fallback:', err);
       }
     }
 
-    try {
-      const saved = localStorage.getItem(INCIDENT_STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch (e) {
-      // fallback
-    }
     return localIncidentReports;
   },
 
@@ -1450,26 +1688,27 @@ export const dataService = {
       created_at: new Date().toISOString().split('T')[0],
       status: 'pending_review'
     };
-    const current = await this.getIncidentReports();
-    const updated = [newReport, ...current];
-    localStorage.setItem(INCIDENT_STORAGE_KEY, JSON.stringify(updated));
-    localIncidentReports = updated;
+    localIncidentReports = [newReport, ...localIncidentReports];
+    saveIncidentsToStorage(localIncidentReports);
 
-    if (isSupabaseConfigured) {
+    if (isSupabaseConfigured && isSupabaseReachable !== false) {
       try {
-        await supabase.from('incident_reports').insert({
-          id: newReport.id,
-          booking_id: newReport.booking_id || null,
-          unit_number: newReport.property_title || 'Room',
-          reported_by_name: newReport.inspected_by_name,
-          reported_by_role: newReport.inspected_by_role,
-          guest_name: newReport.guest_name,
-          incident_type: 'damage',
-          severity: 'medium',
-          description: newReport.overall_notes || 'Damage/missing item log',
-          estimated_cost: newReport.estimated_penalty || 0,
-          status: 'pending_review'
-        });
+        await withTimeout(
+          supabase.from('incident_reports').insert({
+            id: newReport.id,
+            booking_id: newReport.booking_id || null,
+            unit_number: newReport.property_title || 'Room',
+            reported_by_name: newReport.inspected_by_name,
+            reported_by_role: newReport.inspected_by_role,
+            guest_name: newReport.guest_name,
+            incident_type: 'damage',
+            severity: 'medium',
+            description: newReport.overall_notes || 'Damage/missing item log',
+            estimated_cost: newReport.estimated_penalty || 0,
+            status: 'pending_review'
+          }),
+          2000
+        );
       } catch (err) {
         console.warn('Note: Could not insert incident report to Supabase:', err);
       }
@@ -1480,20 +1719,21 @@ export const dataService = {
   },
 
   async resolveIncidentReport(reportId: string): Promise<void> {
-    const current = await this.getIncidentReports();
-    const target = current.find(r => r.id === reportId);
+    const target = localIncidentReports.find(r => r.id === reportId);
     if (target) {
       target.status = 'resolved';
-      localStorage.setItem(INCIDENT_STORAGE_KEY, JSON.stringify(current));
-      localIncidentReports = current;
+      saveIncidentsToStorage(localIncidentReports);
     }
 
-    if (isSupabaseConfigured) {
+    if (isSupabaseConfigured && isSupabaseReachable !== false) {
       try {
-        await supabase.from('incident_reports').update({
-          status: 'resolved',
-          resolved_at: new Date().toISOString()
-        }).eq('id', reportId);
+        await withTimeout(
+          supabase.from('incident_reports').update({
+            status: 'resolved',
+            resolved_at: new Date().toISOString()
+          }).eq('id', reportId),
+          2000
+        );
       } catch (err) {
         console.warn('Note: Could not update incident report in Supabase:', err);
       }
@@ -1509,16 +1749,19 @@ export const dataService = {
     subject: string;
     message: string;
   }): Promise<void> {
-    if (isSupabaseConfigured) {
+    if (isSupabaseConfigured && isSupabaseReachable !== false) {
       try {
-        await supabase.from('support_tickets').insert({
-          user_id: currentUser?.id && isUuid(currentUser.id) ? currentUser.id : null,
-          user_name: ticket.user_name,
-          user_email: ticket.user_email,
-          subject: ticket.subject,
-          message: ticket.message,
-          status: 'open'
-        });
+        await withTimeout(
+          supabase.from('support_tickets').insert({
+            user_id: currentUser?.id && isUuid(currentUser.id) ? currentUser.id : null,
+            user_name: ticket.user_name,
+            user_email: ticket.user_email,
+            subject: ticket.subject,
+            message: ticket.message,
+            status: 'open'
+          }),
+          2000
+        );
       } catch (err) {
         console.warn('Note: Could not insert support ticket:', err);
       }
@@ -1526,3 +1769,8 @@ export const dataService = {
     broadcastDataChange('support_tickets', 'insert', ticket);
   }
 };
+
+// Register automatic in-memory cache refresher on cross-tab broadcast events
+registerCacheRefresher(() => {
+  dataService.refreshLocalCache();
+});

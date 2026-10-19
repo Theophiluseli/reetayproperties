@@ -135,11 +135,18 @@ export const IncomingReservationsDesk: React.FC<IncomingReservationsDeskProps> =
   const [specialNotes, setSpecialNotes] = useState('');
   const [paymentStatus, setPaymentStatus] = useState<'paid' | 'pending'>('paid');
 
-  // Auto-sync reservations across all logged-in staff
+  // Keep selectedPropertyId synchronized with available properties
+  React.useEffect(() => {
+    if (properties.length > 0 && (!selectedPropertyId || !properties.some(p => p.id === selectedPropertyId))) {
+      setSelectedPropertyId(properties[0].id);
+    }
+  }, [properties, selectedPropertyId]);
+
+  // Gentle backup poll for incoming bookings
   React.useEffect(() => {
     const syncInterval = setInterval(() => {
       onRefresh();
-    }, 3000);
+    }, 15000);
     return () => clearInterval(syncInterval);
   }, [onRefresh]);
 

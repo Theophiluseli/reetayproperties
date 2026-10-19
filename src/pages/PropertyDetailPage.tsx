@@ -509,7 +509,6 @@ export const PropertyDetailPage: React.FC = () => {
 
               {/* Offer Info */}
               <div className="border-t border-gray-100 pt-4 space-y-1">
-                <h5 className="text-sm font-black text-navy-950">Global offer: Summer Deals</h5>
                 <p className="text-xs text-gray-500 font-medium">Price includes all applicable taxes and fees.</p>
               </div>
 

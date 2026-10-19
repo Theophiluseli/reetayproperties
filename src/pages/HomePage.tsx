@@ -46,12 +46,20 @@ export const HomePage: React.FC<HomePageProps> = ({ activeVertical, onVerticalCh
     try {
       let data = await dataService.getProperties(
         activeVertical,
-        filters.destination
+        filters.destination,
+        undefined,
+        false // Public visitors see only published listings
       );
       if (filters.selectedAmenities.length > 0) {
         data = data.filter(p =>
           filters.selectedAmenities.every(a => p.amenities.includes(a))
         );
+      }
+      if (filters.guests && filters.guests > 1) {
+        data = data.filter(p => (p.max_guests || 2) >= filters.guests);
+      }
+      if (filters.maxPrice && filters.maxPrice < 2000) {
+        data = data.filter(p => p.price_per_night <= filters.maxPrice);
       }
       setProperties(data);
     } catch (err) {

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { supabase, isSupabaseConfigured } from './supabase';
 
 export interface SyncPayload {
@@ -9,14 +9,65 @@ export interface SyncPayload {
   timestamp: number;
 }
 
-// Global synchronization channel name for cross-browser, cross-device sync
-const SYNC_CHANNEL_NAME = 'reetay-global-sync-v1';
+// Global synchronization channel names for cross-browser, cross-device sync
+const SYNC_CHANNEL_NAME = 'reetay-global-sync-v2';
 const SYNC_EVENT_NAME = 'REETAY_DATA_SYNC';
 const DOM_SYNC_EVENT = 'reetay:data-sync';
+const STORAGE_SYNC_KEY = 'reetay_cross_tab_sync_v2';
 
-// Global channel singleton
+// Global Supabase channel singleton
 let globalChannel: ReturnType<typeof supabase.channel> | null = null;
 let isChannelSubscribed = false;
+
+// Cross-tab BroadcastChannel singleton
+let broadcastChannel: BroadcastChannel | null = null;
+
+// Registry of cache refresh callbacks
+type CacheRefreshCallback = () => void;
+let cacheRefreshCallback: CacheRefreshCallback | null = null;
+
+export const registerCacheRefresher = (cb: CacheRefreshCallback) => {
+  cacheRefreshCallback = cb;
+};
+
+// Initialize BroadcastChannel immediately in browser environment
+if (typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined') {
+  try {
+    broadcastChannel = new BroadcastChannel('reetay_broadcast_sync_channel');
+    broadcastChannel.onmessage = (event: MessageEvent<SyncPayload>) => {
+      if (event?.data) {
+        // Rehydrate in-memory storage from localStorage before dispatching
+        if (cacheRefreshCallback) {
+          try {
+            cacheRefreshCallback();
+          } catch (e) {
+            console.error('Error executing cache refresh:', e);
+          }
+        }
+        dispatchDomSyncEvent(event.data);
+      }
+    };
+  } catch (err) {
+    console.warn('BroadcastChannel could not be initialized:', err);
+  }
+}
+
+// Storage event listener fallback for older browsers or if BroadcastChannel is blocked
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (event) => {
+    if (event.key === STORAGE_SYNC_KEY && event.newValue) {
+      try {
+        const payload: SyncPayload = JSON.parse(event.newValue);
+        if (cacheRefreshCallback) {
+          cacheRefreshCallback();
+        }
+        dispatchDomSyncEvent(payload);
+      } catch (e) {
+        // ignore parse error
+      }
+    }
+  });
+}
 
 /**
  * Initialize the global Supabase Realtime channel for WebSocket broadcast and Postgres database events.
@@ -28,15 +79,18 @@ export const initRealtimeSync = () => {
     globalChannel = supabase.channel(SYNC_CHANNEL_NAME, {
       config: {
         broadcast: {
-          self: false, // Don't echo broadcast back to the sender in same tab
-          ack: true
+          self: false,
+          ack: false
         }
       }
     });
 
-    // 1. Listen for instant WebSocket broadcasts from any active browser or device
+    // 1. Listen for instant WebSocket broadcasts from other remote devices
     globalChannel.on('broadcast', { event: SYNC_EVENT_NAME }, (payload: { payload: SyncPayload }) => {
       if (payload?.payload) {
+        if (cacheRefreshCallback) {
+          cacheRefreshCallback();
+        }
         dispatchDomSyncEvent(payload.payload);
       }
     });
@@ -60,6 +114,9 @@ export const initRealtimeSync = () => {
             id: (dbPayload.new as any)?.id || (dbPayload.old as any)?.id,
             timestamp: Date.now()
           };
+          if (cacheRefreshCallback) {
+            cacheRefreshCallback();
+          }
           dispatchDomSyncEvent(syncData);
         }
       );
@@ -69,17 +126,17 @@ export const initRealtimeSync = () => {
       if (status === 'SUBSCRIBED') {
         isChannelSubscribed = true;
         console.log('⚡ [RealtimeSync] WebSocket connected & subscribed to live database stream.');
-      } else if (err) {
-        console.warn('⚠️ [RealtimeSync] WebSocket subscription issue:', err);
+      } else if (err || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        isChannelSubscribed = false;
       }
     });
   } catch (err) {
-    console.error('Failed to initialize Realtime sync:', err);
+    // Graceful fallback to BroadcastChannel without throwing
   }
 };
 
 /**
- * Dispatch a local custom DOM event so React components can update immediately
+ * Dispatch a local custom DOM event so React components in the current tab update immediately
  */
 const dispatchDomSyncEvent = (payload: SyncPayload) => {
   if (typeof window !== 'undefined') {
@@ -90,7 +147,7 @@ const dispatchDomSyncEvent = (payload: SyncPayload) => {
 };
 
 /**
- * Broadcast a data change event across all open browsers, mobile devices, and tabs.
+ * Broadcast a data change event across all open tabs, windows, and remote devices.
  */
 export const broadcastDataChange = async (
   table: string,
@@ -106,11 +163,27 @@ export const broadcastDataChange = async (
     timestamp: Date.now()
   };
 
-  // Dispatch locally in this browser window
+  // 1. Dispatch locally in this browser window
   dispatchDomSyncEvent(payload);
 
-  // Send via Supabase WebSocket broadcast to all other devices & browsers
-  if (isSupabaseConfigured && globalChannel) {
+  // 2. Broadcast across tabs and windows via BroadcastChannel
+  if (broadcastChannel) {
+    try {
+      broadcastChannel.postMessage(payload);
+    } catch (e) {
+      console.warn('BroadcastChannel postMessage failed:', e);
+    }
+  }
+
+  // 3. Fallback ping via localStorage storage event
+  try {
+    localStorage.setItem(STORAGE_SYNC_KEY, JSON.stringify(payload));
+  } catch (e) {
+    // ignore
+  }
+
+  // 4. Send via Supabase WebSocket broadcast to all other remote devices
+  if (isSupabaseConfigured && globalChannel && isChannelSubscribed) {
     try {
       await globalChannel.send({
         type: 'broadcast',
@@ -118,7 +191,7 @@ export const broadcastDataChange = async (
         payload
       });
     } catch (err) {
-      console.warn('Failed to send broadcast payload:', err);
+      // ignore offline failure
     }
   }
 };
@@ -131,6 +204,13 @@ export const useRealtimeSync = (
   tables: string[],
   onSync: (payload: SyncPayload) => void
 ) => {
+  const onSyncRef = useRef(onSync);
+  useEffect(() => {
+    onSyncRef.current = onSync;
+  });
+
+  const tablesKey = tables.join(',');
+
   useEffect(() => {
     initRealtimeSync();
 
@@ -140,9 +220,10 @@ export const useRealtimeSync = (
 
       if (!payload) return;
 
+      const filterTables = tablesKey ? tablesKey.split(',') : [];
       // Match all or specific tables
-      if (tables.length === 0 || tables.includes('*') || tables.includes(payload.table)) {
-        onSync(payload);
+      if (filterTables.length === 0 || filterTables.includes('*') || filterTables.includes(payload.table)) {
+        onSyncRef.current(payload);
       }
     };
 
@@ -155,5 +236,5 @@ export const useRealtimeSync = (
         window.removeEventListener(DOM_SYNC_EVENT, handleSync);
       }
     };
-  }, [tables.join(','), onSync]);
+  }, [tablesKey]);
 };

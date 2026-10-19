@@ -29,7 +29,7 @@ export const NotificationsPage: React.FC = () => {
               <Tag className="w-4 h-4" />
             </div>
             <div>
-              <h4 className="text-xs font-extrabold text-navy-950">Summer Deals Discount Unlocked</h4>
+              <h4 className="text-xs font-extrabold text-navy-950">Special Offer Discount Unlocked</h4>
               <p className="text-xs text-gray-500 font-light mt-0.5">Get 15% off executive chauffeur rentals when combined with any 3-night stay.</p>
               <span className="text-[10px] text-gray-400 mt-1 block">Yesterday</span>
             </div>

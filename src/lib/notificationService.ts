@@ -25,10 +25,11 @@ export const subscribeToNotifications = (cb: ToastCallback) => {
 
 const dispatchHistory: NotificationPayload[] = [];
 
-const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL || 'admin@reetay.com';
-const MANAGER_EMAIL = import.meta.env.VITE_MANAGER_EMAIL || 'manager@reetay.com';
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const env = (typeof import.meta !== 'undefined' && import.meta.env) ? import.meta.env : {} as Record<string, string>;
+const ADMIN_EMAIL = env.VITE_ADMIN_EMAIL || 'admin@reetay.com';
+const MANAGER_EMAIL = env.VITE_MANAGER_EMAIL || 'manager@reetay.com';
+const SUPABASE_URL = env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = env.VITE_SUPABASE_ANON_KEY;
 
 export const notificationService = {
   getDispatchHistory(): NotificationPayload[] {
@@ -95,9 +96,9 @@ export const notificationService = {
     listeners.forEach(cb => cb(payload));
 
     // 2. Real-time Email Dispatch: Resend API (Direct or via Edge Function)
-    const resendApiKey = import.meta.env.VITE_RESEND_API_KEY;
-    const fromEmail = import.meta.env.VITE_FROM_EMAIL || 'Reetay Concierge <onboarding@resend.dev>';
-    const testOwnerEmail = import.meta.env.VITE_TEST_OWNER_EMAIL || 'reetaypropertiess@gmail.com';
+    const resendApiKey = env.VITE_RESEND_API_KEY;
+    const fromEmail = env.VITE_FROM_EMAIL || 'Reetay Concierge <onboarding@resend.dev>';
+    const testOwnerEmail = env.VITE_TEST_OWNER_EMAIL || 'reetaypropertiess@gmail.com';
 
     if (resendApiKey) {
       try {
@@ -158,7 +159,7 @@ export const notificationService = {
 
     // 3. Fallback / Edge Function Dispatch
     try {
-      const functionUrl = import.meta.env.VITE_EMAIL_API_URL || 
+      const functionUrl = env.VITE_EMAIL_API_URL || 
         (SUPABASE_URL && SUPABASE_URL !== 'https://placeholder.supabase.co' ? `${SUPABASE_URL}/functions/v1/send-booking-email` : null);
 
       if (functionUrl && !resendApiKey) {
