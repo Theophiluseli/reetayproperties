@@ -98,18 +98,20 @@ if (typeof window !== 'undefined') {
     dispatchDomSyncEvent({ table: 'all', action: 'sync', timestamp: Date.now() });
   });
 
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
-      if (cacheRefreshCallback) {
-        try {
-          cacheRefreshCallback();
-        } catch (e) {
-          // ignore
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        if (cacheRefreshCallback) {
+          try {
+            cacheRefreshCallback();
+          } catch (e) {
+            // ignore
+          }
         }
+        dispatchDomSyncEvent({ table: 'all', action: 'sync', timestamp: Date.now() });
       }
-      dispatchDomSyncEvent({ table: 'all', action: 'sync', timestamp: Date.now() });
-    }
-  });
+    });
+  }
 }
 
 // Initialize Global Cross-Device Cloud Sync immediately in browser

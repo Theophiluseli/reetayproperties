@@ -162,16 +162,57 @@ const saveStaffToStorage = (staffList: StaffAccount[]) => {
 };
 
 // Storage keys for persistent local storage caching
-const PROPERTIES_STORAGE_KEY = 'reetay_properties_v5';
-const BOOKINGS_STORAGE_KEY = 'reetay_bookings_v5';
-const REVIEWS_STORAGE_KEY = 'reetay_reviews_v5';
-const FAVORITES_STORAGE_KEY = 'reetay_favorites_v5';
+const PROPERTIES_STORAGE_KEY = 'reetay_properties_v6';
+const BOOKINGS_STORAGE_KEY = 'reetay_bookings_v6';
+const REVIEWS_STORAGE_KEY = 'reetay_reviews_v6';
+const FAVORITES_STORAGE_KEY = 'reetay_favorites_v6';
 const SESSION_STORAGE_KEY = 'reetay_active_session_v1';
+
+export const DEMO_PROPERTY_IDS = new Set([
+  'prop-1', 'prop-2', 'prop-3', 'prop-4', 'prop-5',
+  'car-1', 'car-2', 'car-3', 'car-4', 'car-5', 'car-6', 'car-7', 'car-8', 'car-9', 'car-10',
+  'exp-1'
+]);
+
+export const isDemoProperty = (p: any): boolean => {
+  if (!p) return false;
+  if (p.id && DEMO_PROPERTY_IDS.has(p.id)) return true;
+  if (typeof p.id === 'string' && (p.id.startsWith('prop-') || p.id.startsWith('car-') || p.id.startsWith('exp-'))) return true;
+  const title = (p.title || '').toLowerCase();
+  if (
+    title.includes('the reetay grand penthouse') ||
+    title.includes('cantonments garden villa') ||
+    title.includes('labone modern glass loft') ||
+    title.includes('east legon executive sanctuary') ||
+    title.includes('aburi mountain ocean-view')
+  ) {
+    return true;
+  }
+  return false;
+};
 
 // Purge legacy demo data caches from localStorage on load
 if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
   try {
     ['reetay_properties_v1', 'reetay_properties_v2', 'reetay_properties_v3', 'reetay_properties_v4', 'reetay_bookings_v1', 'reetay_bookings_v2', 'reetay_bookings_v3', 'reetay_bookings_v4'].forEach(k => localStorage.removeItem(k));
+    // Clean out any demo items from v5 cache while preserving any real custom listings created by another admin
+    const v5 = localStorage.getItem('reetay_properties_v5');
+    if (v5) {
+      const parsed = JSON.parse(v5);
+      if (Array.isArray(parsed)) {
+        const cleaned = parsed.filter((p: any) => !isDemoProperty(p));
+        localStorage.setItem('reetay_properties_v5', JSON.stringify(cleaned));
+      }
+    }
+    // Also clean v6
+    const v6 = localStorage.getItem(PROPERTIES_STORAGE_KEY);
+    if (v6) {
+      const parsed = JSON.parse(v6);
+      if (Array.isArray(parsed)) {
+        const cleaned = parsed.filter((p: any) => !isDemoProperty(p));
+        localStorage.setItem(PROPERTIES_STORAGE_KEY, JSON.stringify(cleaned));
+      }
+    }
   } catch (e) {
     // ignore
   }
@@ -202,19 +243,33 @@ export const loadPropertiesFromStorage = (): Property[] => {
     const saved = localStorage.getItem(PROPERTIES_STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+      if (Array.isArray(parsed)) {
+        const cleaned = parsed.filter((p: any) => !isDemoProperty(p));
+        if (cleaned.length > 0) return cleaned;
+      }
+    }
+    // Fallback: check v5 storage to automatically recover any listing created by another admin
+    const savedV5 = localStorage.getItem('reetay_properties_v5');
+    if (savedV5) {
+      const parsedV5 = JSON.parse(savedV5);
+      if (Array.isArray(parsedV5)) {
+        const customOnly = parsedV5.filter((p: any) => !isDemoProperty(p));
+        if (customOnly.length > 0) {
+          localStorage.setItem(PROPERTIES_STORAGE_KEY, JSON.stringify(customOnly));
+          return customOnly;
+        }
       }
     }
   } catch (e) {
     console.error('Failed to load properties from localStorage:', e);
   }
-  return [...MOCK_PROPERTIES];
+  return [];
 };
 
 export const savePropertiesToStorage = (props: Property[]) => {
   try {
-    localStorage.setItem(PROPERTIES_STORAGE_KEY, JSON.stringify(props));
+    const cleaned = props.filter((p: any) => !isDemoProperty(p));
+    localStorage.setItem(PROPERTIES_STORAGE_KEY, JSON.stringify(cleaned));
   } catch (e) {
     console.error('Failed to save properties to localStorage:', e);
   }
@@ -269,12 +324,12 @@ export const loadFavoritesFromStorage = (): string[] => {
     const saved = localStorage.getItem(FAVORITES_STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed)) return parsed.filter((id: string) => !DEMO_PROPERTY_IDS.has(id));
     }
   } catch (e) {
     console.error('Failed to load favorites from localStorage:', e);
   }
-  return ['prop-1'];
+  return [];
 };
 
 export const saveFavoritesToStorage = (favs: string[]) => {
@@ -1173,6 +1228,7 @@ export const dataService = {
     }
 
     return localProperties.filter(p => {
+      if (isDemoProperty(p)) return false;
       if (vertical && vertical !== 'all' && p.vertical !== vertical) return false;
       if (!includeDrafts && p.status === 'draft') return false;
       if (query) {
@@ -1192,9 +1248,10 @@ export const dataService = {
   },
 
   async getPropertyById(id: string): Promise<Property | null> {
+    if (DEMO_PROPERTY_IDS.has(id)) return null;
     // 1. Check local cache first - instant 0ms response
     const found = localProperties.find(p => p.id === id);
-    if (found) return found;
+    if (found && !isDemoProperty(found)) return found;
 
     // 2. If not found locally and Supabase is configured and reachable, attempt remote
     if (isSupabaseConfigured && isUuid(id) && isSupabaseReachable !== false) {
@@ -1904,20 +1961,24 @@ registerCacheRefresher(() => {
 });
 
 // Register cloud snapshot handler so remote devices receive listings upon connecting
-// Safety Rule: Empty snapshots NEVER wipe local properties
+// Safety Rule: Empty snapshots or demo properties NEVER contaminate local properties
 registerSnapshotHandler((table, items) => {
-  if (table === 'properties' && Array.isArray(items) && items.length > 0) {
-    const localMap = new Map(localProperties.map(p => [p.id, p]));
-    let hasNew = false;
-    for (const item of items) {
-      if (!localMap.has(item.id)) {
-        localMap.set(item.id, item);
-        hasNew = true;
+  if (table === 'properties' && Array.isArray(items)) {
+    const validItems = items.filter(p => !isDemoProperty(p));
+    if (validItems.length > 0) {
+      const localMap = new Map(localProperties.map(p => [p.id, p]));
+      let hasNew = false;
+      for (const item of validItems) {
+        if (!localMap.has(item.id)) {
+          localMap.set(item.id, item);
+          hasNew = true;
+        }
       }
-    }
-    if (hasNew || localProperties.length === 0) {
-      localProperties = Array.from(localMap.values());
-      savePropertiesToStorage(localProperties);
+      if (hasNew || localProperties.length === 0) {
+        localProperties = Array.from(localMap.values()).filter(p => !isDemoProperty(p));
+        savePropertiesToStorage(localProperties);
+        broadcastDataChange('properties', 'sync');
+      }
     }
   } else if (table === 'bookings' && Array.isArray(items) && items.length > 0) {
     const localMap = new Map(localBookings.map(b => [b.id, b]));
@@ -1931,15 +1992,17 @@ registerSnapshotHandler((table, items) => {
     if (hasNew || localBookings.length === 0) {
       localBookings = Array.from(localMap.values());
       saveBookingsToStorage(localBookings);
+      broadcastDataChange('bookings', 'sync');
     }
   }
 });
 
 // Register peer sync request handler (when a new device opens, share active listings if we have them)
 registerSyncRequestHandler(() => {
-  if (localProperties.length > 0) {
-    cloudSync.publishSnapshot('properties', localProperties);
-    cloudStorage.saveCloudProperties(localProperties);
+  const customOnly = localProperties.filter(p => !isDemoProperty(p));
+  if (customOnly.length > 0) {
+    cloudSync.publishSnapshot('properties', customOnly);
+    cloudStorage.saveCloudProperties(customOnly);
   }
   if (localBookings.length > 0) {
     cloudSync.publishSnapshot('bookings', localBookings);

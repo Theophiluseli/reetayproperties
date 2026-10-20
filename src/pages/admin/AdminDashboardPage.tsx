@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { dataService, DEFAULT_RECEPTIONIST_PERMISSIONS, DEFAULT_MANAGER_PERMISSIONS, DEFAULT_ADMIN_PERMISSIONS } from '../../lib/supabase';
 import { useRealtimeSync } from '../../lib/realtimeSync';
+import { cloudSync } from '../../lib/cloudSync';
 import { Property, Booking, User, VerticalType, StaffAccount, IncidentReport, StaffPermissions, DatabaseHealthInfo } from '../../types';
 import { IncomingReservationsDesk } from '../../components/dashboard/IncomingReservationsDesk';
 import {
@@ -208,6 +209,13 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ adminUse
     setIsRefreshingDb(false);
     setStaffNotification('Database connection health verified.');
     setTimeout(() => setStaffNotification(''), 3000);
+  };
+
+  const handleSyncFromPeers = () => {
+    cloudSync.requestPeerSync();
+    setStaffNotification('Sync request sent across global network! Pulling listings from any active admin device...');
+    setTimeout(() => loadAdminData(), 1200);
+    setTimeout(() => setStaffNotification(''), 4500);
   };
 
   const handleOpenResetPassword = (staff: StaffAccount) => {
@@ -843,6 +851,14 @@ Password: ${staff.password || 'staff123'}`;
           >
             <UserCheck className="w-4 h-4" />
             <span>Record Walk-in Booking</span>
+          </button>
+          <button
+            onClick={handleSyncFromPeers}
+            className="flex-1 sm:flex-none px-4 sm:px-5 py-2.5 sm:py-3 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer border border-blue-500/50"
+            title="Request listings from other admin devices connected anywhere"
+          >
+            <RefreshCw className="w-4 h-4" />
+            <span>Sync from Other Admins</span>
           </button>
           <button
             onClick={handleOpenAddModal}

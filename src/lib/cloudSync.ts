@@ -17,9 +17,9 @@ const BROKERS = [
   'wss://test.mosquitto.org:8081'
 ];
 
-const TOPIC_EVENTS = 'reetay/sync/v5/events';
-const TOPIC_SNAPSHOT_PROPERTIES = 'reetay/sync/v5/properties';
-const TOPIC_SNAPSHOT_BOOKINGS = 'reetay/sync/v5/bookings';
+const TOPIC_EVENTS = 'reetay/sync/v6/events';
+const TOPIC_SNAPSHOT_PROPERTIES = 'reetay/sync/v6/properties';
+const TOPIC_SNAPSHOT_BOOKINGS = 'reetay/sync/v6/bookings';
 
 const CLIENT_ID = 'client_' + Math.random().toString(36).substring(2, 10);
 
@@ -171,7 +171,7 @@ function handleIncomingPackets(buf: Uint8Array) {
         const payloadStr = new TextDecoder().decode(packetBuf.subarray(payloadOffset));
         if (!payloadStr) continue;
 
-        if (topic === TOPIC_EVENTS) {
+        if (topic === TOPIC_EVENTS || topic === 'reetay/sync/v5/events') {
           const payload: CloudSyncPayload = JSON.parse(payloadStr);
           if (payload.senderId !== CLIENT_ID) {
             if (payload.action === 'sync_request' && onSyncRequestCallback) {
@@ -180,12 +180,12 @@ function handleIncomingPackets(buf: Uint8Array) {
               onEventCallback(payload);
             }
           }
-        } else if (topic === TOPIC_SNAPSHOT_PROPERTIES) {
+        } else if (topic === TOPIC_SNAPSHOT_PROPERTIES || topic === 'reetay/sync/v5/properties') {
           const items = JSON.parse(payloadStr);
           if (Array.isArray(items) && onSnapshotCallback) {
             onSnapshotCallback('properties', items);
           }
-        } else if (topic === TOPIC_SNAPSHOT_BOOKINGS) {
+        } else if (topic === TOPIC_SNAPSHOT_BOOKINGS || topic === 'reetay/sync/v5/bookings') {
           const items = JSON.parse(payloadStr);
           if (Array.isArray(items) && onSnapshotCallback) {
             onSnapshotCallback('bookings', items);
@@ -242,10 +242,16 @@ export const cloudSync = {
           isConnected = true;
           console.log(`🌐 [CloudSync] Connected to global sync cloud (${brokerUrl})`);
 
-          // Subscribe to live events and retained snapshots
+          // Subscribe to live events and retained snapshots (v6 active and v5 legacy bridge)
           sendSubscribe(ws, TOPIC_EVENTS);
           sendSubscribe(ws, TOPIC_SNAPSHOT_PROPERTIES);
           sendSubscribe(ws, TOPIC_SNAPSHOT_BOOKINGS);
+          sendSubscribe(ws, 'reetay/sync/v5/events');
+          sendSubscribe(ws, 'reetay/sync/v5/properties');
+          sendSubscribe(ws, 'reetay/sync/v5/bookings');
+
+          // Immediately clear the stale demo snapshot retained on the v5 topic
+          rawSendPublish(ws, 'reetay/sync/v5/properties', '[]', true);
 
           // Flush queued messages that were pending while offline/connecting
           flushOutbox();
@@ -312,5 +318,9 @@ export const cloudSync = {
     } else {
       outboxQueue.push({ topic, message, retain: true });
     }
+  },
+
+  requestPeerSync() {
+    this.publishEvent('all', 'sync_request');
   }
 };
