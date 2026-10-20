@@ -2,7 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 import { Property, Booking, Review, Conversation, Message, User, StaffAccount, StaffPermissions, ShiftHandover, IncidentReport, DatabaseHealthInfo } from '../types';
 import { MOCK_PROPERTIES, MOCK_BOOKINGS, MOCK_REVIEWS, MOCK_CONVERSATIONS, MOCK_MESSAGES, MOCK_USER, MOCK_RECEPTIONIST_USER, MOCK_MANAGER_USER } from '../data/mockData';
 import { notificationService } from './notificationService';
-import { broadcastDataChange, registerCacheRefresher } from './realtimeSync';
+import { broadcastDataChange, registerCacheRefresher, registerSnapshotHandler } from './realtimeSync';
+import { cloudSync } from './cloudSync';
 
 const env = (typeof import.meta !== 'undefined' && import.meta.env) ? import.meta.env : {} as Record<string, string>;
 const supabaseUrl = env.VITE_SUPABASE_URL || 'https://placeholder.supabase.co';
@@ -160,11 +161,20 @@ const saveStaffToStorage = (staffList: StaffAccount[]) => {
 };
 
 // Storage keys for persistent local storage caching
-const PROPERTIES_STORAGE_KEY = 'reetay_properties_v2';
-const BOOKINGS_STORAGE_KEY = 'reetay_bookings_v2';
-const REVIEWS_STORAGE_KEY = 'reetay_reviews_v2';
-const FAVORITES_STORAGE_KEY = 'reetay_favorites_v2';
+const PROPERTIES_STORAGE_KEY = 'reetay_properties_v5';
+const BOOKINGS_STORAGE_KEY = 'reetay_bookings_v5';
+const REVIEWS_STORAGE_KEY = 'reetay_reviews_v5';
+const FAVORITES_STORAGE_KEY = 'reetay_favorites_v5';
 const SESSION_STORAGE_KEY = 'reetay_active_session_v1';
+
+// Purge legacy demo data caches from localStorage on load
+if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+  try {
+    ['reetay_properties_v1', 'reetay_properties_v2', 'reetay_properties_v3', 'reetay_properties_v4', 'reetay_bookings_v1', 'reetay_bookings_v2', 'reetay_bookings_v3', 'reetay_bookings_v4'].forEach(k => localStorage.removeItem(k));
+  } catch (e) {
+    // ignore
+  }
+}
 
 const INITIAL_INCIDENTS: IncidentReport[] = [
   {
@@ -191,17 +201,14 @@ export const loadPropertiesFromStorage = (): Property[] => {
     const saved = localStorage.getItem(PROPERTIES_STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        // Merge in any default mock properties that are not yet in the saved list
-        const existingIds = new Set(parsed.map((p: Property) => p.id));
-        const missingMocks = MOCK_PROPERTIES.filter(p => !existingIds.has(p.id));
-        return missingMocks.length > 0 ? [...parsed, ...missingMocks] : parsed;
+      if (Array.isArray(parsed)) {
+        return parsed;
       }
     }
   } catch (e) {
     console.error('Failed to load properties from localStorage:', e);
   }
-  return [...MOCK_PROPERTIES];
+  return [];
 };
 
 export const savePropertiesToStorage = (props: Property[]) => {
@@ -217,14 +224,14 @@ export const loadBookingsFromStorage = (): Booking[] => {
     const saved = localStorage.getItem(BOOKINGS_STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) {
+      if (Array.isArray(parsed)) {
         return parsed;
       }
     }
   } catch (e) {
     console.error('Failed to load bookings from localStorage:', e);
   }
-  return [...MOCK_BOOKINGS];
+  return [];
 };
 
 export const saveBookingsToStorage = (bookings: Booking[]) => {
@@ -333,7 +340,37 @@ let localStaffAccounts: StaffAccount[] = loadStaffFromStorage();
 let currentUser: User | null = loadActiveSession();
 
 export const mapRowToProperty = (row: any): Property => {
-  if (!row) return MOCK_PROPERTIES[0];
+  if (!row) {
+    return {
+      id: generateUuid(),
+      title: 'New Luxury Residence',
+      description: 'Exclusive luxury residence in Accra.',
+      vertical: 'stays',
+      location: {
+        city: 'Accra',
+        area: 'Airport Residential',
+        address: 'Airport Residential Area, Accra',
+        lat: 5.6037,
+        lng: -0.1870
+      },
+      price_per_night: 250,
+      currency: '$',
+      max_guests: 2,
+      bedrooms: 1,
+      beds: 1,
+      bathrooms: 1,
+      amenities: ['WiFi', 'Air Conditioning'],
+      images: ['https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1200&q=80'],
+      status: 'published',
+      rating: 5.0,
+      review_count: 0,
+      host: {
+        name: 'Reetay Luxury Hospitality',
+        avatar: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=200&q=80',
+        superhost: true
+      }
+    };
+  }
   if (row.location && typeof row.location === 'object' && row.location.city) {
     return row as Property;
   }
@@ -930,6 +967,7 @@ export const dataService = {
 
     // 2. Broadcast change across all browser tabs and windows immediately
     broadcastDataChange('properties', 'insert', created);
+    cloudSync.publishSnapshot('properties', localProperties);
 
     // 3. Sync to Supabase in background if online
     if (isSupabaseConfigured && isSupabaseReachable !== false) {
@@ -992,6 +1030,7 @@ export const dataService = {
 
     // 2. Broadcast change across all browser tabs and windows
     broadcastDataChange('properties', 'update', localProperties[idx], id);
+    cloudSync.publishSnapshot('properties', localProperties);
 
     // 3. Sync to Supabase in background if online and valid UUID
     if (isSupabaseConfigured && isUuid(id) && isSupabaseReachable !== false) {
@@ -1034,6 +1073,7 @@ export const dataService = {
     // Persist and broadcast
     savePropertiesToStorage(localProperties);
     broadcastDataChange('properties', 'update', target, id);
+    cloudSync.publishSnapshot('properties', localProperties);
 
     if (isSupabaseConfigured && isUuid(id) && isSupabaseReachable !== false) {
       try {
@@ -1050,6 +1090,7 @@ export const dataService = {
     localProperties = localProperties.filter(p => p.id !== id);
     savePropertiesToStorage(localProperties);
     broadcastDataChange('properties', 'delete', null, id);
+    cloudSync.publishSnapshot('properties', localProperties);
 
     if (isSupabaseConfigured && isUuid(id) && isSupabaseReachable !== false) {
       try {
@@ -1278,6 +1319,7 @@ export const dataService = {
     }
 
     broadcastDataChange('bookings', 'insert', newBooking);
+    cloudSync.publishSnapshot('bookings', localBookings);
     return newBooking;
   },
 
@@ -1403,6 +1445,7 @@ export const dataService = {
     }
 
     broadcastDataChange('bookings', 'insert', newBooking);
+    cloudSync.publishSnapshot('bookings', localBookings);
     return newBooking;
   },
 
@@ -1433,6 +1476,7 @@ export const dataService = {
     }
 
     broadcastDataChange('bookings', 'update', target, bookingId);
+    cloudSync.publishSnapshot('bookings', localBookings);
   },
 
   async checkOutGuest(bookingId: string): Promise<void> {
@@ -1462,6 +1506,7 @@ export const dataService = {
     }
 
     broadcastDataChange('bookings', 'update', target, bookingId);
+    cloudSync.publishSnapshot('bookings', localBookings);
   },
 
   async updateBookingStatus(bookingId: string, newStatus: 'upcoming' | 'active' | 'completed' | 'cancelled'): Promise<void> {
@@ -1492,6 +1537,7 @@ export const dataService = {
     }
 
     broadcastDataChange('bookings', 'update', target, bookingId);
+    cloudSync.publishSnapshot('bookings', localBookings);
   },
 
   async deleteBooking(bookingId: string): Promise<void> {
@@ -1510,6 +1556,7 @@ export const dataService = {
     }
 
     broadcastDataChange('bookings', 'delete', null, bookingId);
+    cloudSync.publishSnapshot('bookings', localBookings);
   },
 
   // Favorites
@@ -1773,4 +1820,15 @@ export const dataService = {
 // Register automatic in-memory cache refresher on cross-tab broadcast events
 registerCacheRefresher(() => {
   dataService.refreshLocalCache();
+});
+
+// Register cloud snapshot handler so remote devices receive listings upon connecting
+registerSnapshotHandler((table, items) => {
+  if (table === 'properties' && Array.isArray(items)) {
+    localProperties = items;
+    savePropertiesToStorage(localProperties);
+  } else if (table === 'bookings' && Array.isArray(items)) {
+    localBookings = items;
+    saveBookingsToStorage(localBookings);
+  }
 });

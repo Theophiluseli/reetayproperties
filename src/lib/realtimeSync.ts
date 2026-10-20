@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { supabase, isSupabaseConfigured } from './supabase';
+import { cloudSync } from './cloudSync';
 
 export interface SyncPayload {
   table: string;
@@ -30,13 +31,20 @@ export const registerCacheRefresher = (cb: CacheRefreshCallback) => {
   cacheRefreshCallback = cb;
 };
 
-// Initialize BroadcastChannel immediately in browser environment
+// Registry of snapshot callbacks (when remote cloud snapshot is received on startup)
+type SnapshotCallback = (table: 'properties' | 'bookings', items: any[]) => void;
+let snapshotCallback: SnapshotCallback | null = null;
+
+export const registerSnapshotHandler = (cb: SnapshotCallback) => {
+  snapshotCallback = cb;
+};
+
+// Initialize BroadcastChannel immediately in browser environment for 0ms cross-tab sync
 if (typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined') {
   try {
     broadcastChannel = new BroadcastChannel('reetay_broadcast_sync_channel');
     broadcastChannel.onmessage = (event: MessageEvent<SyncPayload>) => {
       if (event?.data) {
-        // Rehydrate in-memory storage from localStorage before dispatching
         if (cacheRefreshCallback) {
           try {
             cacheRefreshCallback();
@@ -52,7 +60,7 @@ if (typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined') {
   }
 }
 
-// Storage event listener fallback for older browsers or if BroadcastChannel is blocked
+// Storage event listener fallback for older browsers
 if (typeof window !== 'undefined') {
   window.addEventListener('storage', (event) => {
     if (event.key === STORAGE_SYNC_KEY && event.newValue) {
@@ -67,6 +75,56 @@ if (typeof window !== 'undefined') {
       }
     }
   });
+}
+
+// Initialize Global Cross-Device Cloud Sync immediately in browser
+if (typeof window !== 'undefined') {
+  try {
+    cloudSync.init(
+      // On real-time mutation from any remote device anywhere in the world
+      (cloudPayload) => {
+        if (cacheRefreshCallback) {
+          try {
+            cacheRefreshCallback();
+          } catch (e) {
+            // ignore
+          }
+        }
+        dispatchDomSyncEvent({
+          table: cloudPayload.table,
+          action: cloudPayload.action,
+          data: cloudPayload.data,
+          id: cloudPayload.id,
+          timestamp: cloudPayload.timestamp
+        });
+      },
+      // On initial cloud snapshot received (e.g. phone connects and pulls listings)
+      (table, items) => {
+        if (snapshotCallback) {
+          try {
+            snapshotCallback(table, items);
+          } catch (e) {
+            // ignore
+          }
+        }
+        if (cacheRefreshCallback) {
+          try {
+            cacheRefreshCallback();
+          } catch (e) {
+            // ignore
+          }
+        }
+        dispatchDomSyncEvent({
+          table,
+          action: 'sync',
+          data: items,
+          timestamp: Date.now()
+        });
+      }
+    );
+  } catch (err) {
+    console.warn('CloudSync init error:', err);
+  }
 }
 
 /**
@@ -131,7 +189,7 @@ export const initRealtimeSync = () => {
       }
     });
   } catch (err) {
-    // Graceful fallback to BroadcastChannel without throwing
+    // Graceful fallback without throwing
   }
 };
 
@@ -163,10 +221,10 @@ export const broadcastDataChange = async (
     timestamp: Date.now()
   };
 
-  // 1. Dispatch locally in this browser window
+  // 1. Dispatch locally in this browser window (0ms)
   dispatchDomSyncEvent(payload);
 
-  // 2. Broadcast across tabs and windows via BroadcastChannel
+  // 2. Broadcast across tabs and windows via BroadcastChannel (0ms)
   if (broadcastChannel) {
     try {
       broadcastChannel.postMessage(payload);
@@ -182,7 +240,14 @@ export const broadcastDataChange = async (
     // ignore
   }
 
-  // 4. Send via Supabase WebSocket broadcast to all other remote devices
+  // 4. Broadcast across ALL devices, phones, tablets & computers over global cloud WebSocket (<100ms)
+  try {
+    cloudSync.publishEvent(table, action, data, id);
+  } catch (e) {
+    console.warn('Cloud sync publish error:', e);
+  }
+
+  // 5. Send via Supabase WebSocket broadcast to remote devices if connected
   if (isSupabaseConfigured && globalChannel && isChannelSubscribed) {
     try {
       await globalChannel.send({
