@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { Property, Booking, Review, Conversation, Message, User, StaffAccount, StaffPermissions, ShiftHandover, IncidentReport, DatabaseHealthInfo } from '../types';
-import { MOCK_REVIEWS, MOCK_CONVERSATIONS, MOCK_MESSAGES, MOCK_USER, MOCK_RECEPTIONIST_USER, MOCK_MANAGER_USER } from '../data/mockData';
+import { MOCK_PROPERTIES, MOCK_REVIEWS, MOCK_CONVERSATIONS, MOCK_MESSAGES, MOCK_USER, MOCK_RECEPTIONIST_USER, MOCK_MANAGER_USER } from '../data/mockData';
 import { notificationService } from './notificationService';
 import { broadcastDataChange, registerCacheRefresher, registerSnapshotHandler, registerSyncRequestHandler } from './realtimeSync';
 import { cloudSync } from './cloudSync';
@@ -202,14 +202,14 @@ export const loadPropertiesFromStorage = (): Property[] => {
     const saved = localStorage.getItem(PROPERTIES_STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed)) {
+      if (Array.isArray(parsed) && parsed.length > 0) {
         return parsed;
       }
     }
   } catch (e) {
     console.error('Failed to load properties from localStorage:', e);
   }
-  return [];
+  return [...MOCK_PROPERTIES];
 };
 
 export const savePropertiesToStorage = (props: Property[]) => {
