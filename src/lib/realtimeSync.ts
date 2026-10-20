@@ -4,7 +4,7 @@ import { cloudSync } from './cloudSync';
 
 export interface SyncPayload {
   table: string;
-  action: 'insert' | 'update' | 'delete' | 'sync';
+  action: 'insert' | 'update' | 'delete' | 'sync' | 'sync_request';
   data?: any;
   id?: string;
   timestamp: number;
@@ -77,6 +77,41 @@ if (typeof window !== 'undefined') {
   });
 }
 
+// Registry of sync request callbacks (when a remote peer asks for active state)
+type SyncRequestHandler = () => void;
+let syncRequestHandler: SyncRequestHandler | null = null;
+
+export const registerSyncRequestHandler = (cb: SyncRequestHandler) => {
+  syncRequestHandler = cb;
+};
+
+// Window focus & visibility change listeners (instant sync when phone is unlocked or user switches back to tab)
+if (typeof window !== 'undefined') {
+  window.addEventListener('focus', () => {
+    if (cacheRefreshCallback) {
+      try {
+        cacheRefreshCallback();
+      } catch (e) {
+        // ignore
+      }
+    }
+    dispatchDomSyncEvent({ table: 'all', action: 'sync', timestamp: Date.now() });
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      if (cacheRefreshCallback) {
+        try {
+          cacheRefreshCallback();
+        } catch (e) {
+          // ignore
+        }
+      }
+      dispatchDomSyncEvent({ table: 'all', action: 'sync', timestamp: Date.now() });
+    }
+  });
+}
+
 // Initialize Global Cross-Device Cloud Sync immediately in browser
 if (typeof window !== 'undefined') {
   try {
@@ -120,6 +155,16 @@ if (typeof window !== 'undefined') {
           data: items,
           timestamp: Date.now()
         });
+      },
+      // On peer sync request (another device connected and requested current state)
+      () => {
+        if (syncRequestHandler) {
+          try {
+            syncRequestHandler();
+          } catch (e) {
+            // ignore
+          }
+        }
       }
     );
   } catch (err) {
@@ -209,7 +254,7 @@ const dispatchDomSyncEvent = (payload: SyncPayload) => {
  */
 export const broadcastDataChange = async (
   table: string,
-  action: 'insert' | 'update' | 'delete' | 'sync',
+  action: 'insert' | 'update' | 'delete' | 'sync' | 'sync_request',
   data?: any,
   id?: string
 ) => {

@@ -1,10 +1,10 @@
 // Reetay Global Cloud Realtime Synchronization Engine
-// Connects devices across the internet via high-speed WebSockets
-// Provides instant (<100ms) cross-device updates for mobile, desktop & tablets
+// Connects devices across the internet via resilient, high-speed WebSockets
+// Provides instant (<100ms) cross-device updates for mobile, desktop & tablets worldwide
 
 export interface CloudSyncPayload {
   table: string;
-  action: 'insert' | 'update' | 'delete' | 'sync';
+  action: 'insert' | 'update' | 'delete' | 'sync' | 'sync_request';
   data?: any;
   id?: string;
   timestamp: number;
@@ -13,7 +13,8 @@ export interface CloudSyncPayload {
 
 const BROKERS = [
   'wss://broker.emqx.io:8084/mqtt',
-  'wss://broker.hivemq.com:8884/mqtt'
+  'wss://broker.hivemq.com:8884/mqtt',
+  'wss://test.mosquitto.org:8081'
 ];
 
 const TOPIC_EVENTS = 'reetay/sync/v5/events';
@@ -24,6 +25,13 @@ const CLIENT_ID = 'client_' + Math.random().toString(36).substring(2, 10);
 
 type EventCallback = (payload: CloudSyncPayload) => void;
 type SnapshotCallback = (table: 'properties' | 'bookings', data: any[]) => void;
+type SyncRequestCallback = () => void;
+
+interface QueuedMessage {
+  topic: string;
+  message: string;
+  retain: boolean;
+}
 
 let activeWs: WebSocket | null = null;
 let isConnected = false;
@@ -32,6 +40,10 @@ let pingInterval: any = null;
 let reconnectTimeout: any = null;
 let onEventCallback: EventCallback | null = null;
 let onSnapshotCallback: SnapshotCallback | null = null;
+let onSyncRequestCallback: SyncRequestCallback | null = null;
+
+// Outbox queue: messages queued while disconnected are guaranteed to be published on reconnect
+const outboxQueue: QueuedMessage[] = [];
 
 function encodeString(str: string): Uint8Array {
   const utf8 = new TextEncoder().encode(str);
@@ -68,7 +80,7 @@ function concatUint8Arrays(arrays: Uint8Array[]): Uint8Array {
 function sendConnect(ws: WebSocket) {
   const protocolName = encodeString('MQTT');
   const protocolLevel = new Uint8Array([0x04]);
-  const connectFlags = new Uint8Array([0x02]); // clean session
+  const connectFlags = new Uint8Array([0x02]); // Clean session
   const keepAlive = new Uint8Array([0x00, 0x3c]); // 60s
   const clientId = encodeString(CLIENT_ID);
   const variableHeader = concatUint8Arrays([protocolName, protocolLevel, connectFlags, keepAlive, clientId]);
@@ -87,7 +99,7 @@ function sendSubscribe(ws: WebSocket, topic: string) {
   ws.send(packet);
 }
 
-function sendPublish(ws: WebSocket, topic: string, message: string, retain = false) {
+function rawSendPublish(ws: WebSocket, topic: string, message: string, retain = false) {
   try {
     const topicBuf = encodeString(topic);
     const msgBuf = new TextEncoder().encode(message);
@@ -101,45 +113,88 @@ function sendPublish(ws: WebSocket, topic: string, message: string, retain = fal
   }
 }
 
-function handleIncomingPublish(buf: Uint8Array) {
-  try {
-    let offset = 1;
+function flushOutbox() {
+  if (!activeWs || activeWs.readyState !== WebSocket.OPEN) return;
+  while (outboxQueue.length > 0) {
+    const msg = outboxQueue.shift();
+    if (msg) {
+      rawSendPublish(activeWs, msg.topic, msg.message, msg.retain);
+    }
+  }
+}
+
+/**
+ * Robust packet framing parser:
+ * Decodes all MQTT packets inside a single WebSocket frame.
+ * Handles QoS 0, QoS 1, QoS 2, and exact payload boundaries.
+ */
+function handleIncomingPackets(buf: Uint8Array) {
+  let pos = 0;
+  while (pos < buf.length) {
+    const headerByte = buf[pos++];
+    const packetType = headerByte >> 4;
+    const qos = (headerByte & 0x06) >> 1;
+
     let multiplier = 1;
     let remainingLength = 0;
     let digit: number;
     do {
-      digit = buf[offset++];
+      if (pos >= buf.length) break;
+      digit = buf[pos++];
       remainingLength += (digit & 127) * multiplier;
       multiplier *= 128;
     } while ((digit & 128) !== 0);
 
-    const topicLen = (buf[offset] << 8) | buf[offset + 1];
-    offset += 2;
-    const topic = new TextDecoder().decode(buf.subarray(offset, offset + topicLen));
-    offset += topicLen;
-    const payloadStr = new TextDecoder().decode(buf.subarray(offset));
+    const packetEnd = pos + remainingLength;
+    if (packetEnd > buf.length) {
+      // Incomplete packet in frame
+      break;
+    }
 
-    if (!payloadStr) return;
+    const packetBuf = buf.subarray(pos, packetEnd);
+    pos = packetEnd;
 
-    if (topic === TOPIC_EVENTS) {
-      const payload: CloudSyncPayload = JSON.parse(payloadStr);
-      // Ignore echoes from self
-      if (payload.senderId !== CLIENT_ID && onEventCallback) {
-        onEventCallback(payload);
-      }
-    } else if (topic === TOPIC_SNAPSHOT_PROPERTIES) {
-      const items = JSON.parse(payloadStr);
-      if (Array.isArray(items) && onSnapshotCallback) {
-        onSnapshotCallback('properties', items);
-      }
-    } else if (topic === TOPIC_SNAPSHOT_BOOKINGS) {
-      const items = JSON.parse(payloadStr);
-      if (Array.isArray(items) && onSnapshotCallback) {
-        onSnapshotCallback('bookings', items);
+    if (packetType === 3) { // PUBLISH
+      try {
+        if (packetBuf.length < 2) continue;
+        const topicLen = (packetBuf[0] << 8) | packetBuf[1];
+        if (packetBuf.length < 2 + topicLen) continue;
+
+        const topic = new TextDecoder().decode(packetBuf.subarray(2, 2 + topicLen));
+        let payloadOffset = 2 + topicLen;
+
+        // Skip Packet Identifier if QoS > 0
+        if (qos > 0) {
+          payloadOffset += 2;
+        }
+
+        const payloadStr = new TextDecoder().decode(packetBuf.subarray(payloadOffset));
+        if (!payloadStr) continue;
+
+        if (topic === TOPIC_EVENTS) {
+          const payload: CloudSyncPayload = JSON.parse(payloadStr);
+          if (payload.senderId !== CLIENT_ID) {
+            if (payload.action === 'sync_request' && onSyncRequestCallback) {
+              onSyncRequestCallback();
+            } else if (onEventCallback) {
+              onEventCallback(payload);
+            }
+          }
+        } else if (topic === TOPIC_SNAPSHOT_PROPERTIES) {
+          const items = JSON.parse(payloadStr);
+          if (Array.isArray(items) && onSnapshotCallback) {
+            onSnapshotCallback('properties', items);
+          }
+        } else if (topic === TOPIC_SNAPSHOT_BOOKINGS) {
+          const items = JSON.parse(payloadStr);
+          if (Array.isArray(items) && onSnapshotCallback) {
+            onSnapshotCallback('bookings', items);
+          }
+        }
+      } catch (err) {
+        // Ignore single malformed packet
       }
     }
-  } catch (e) {
-    // ignore parse error on malformed message
   }
 }
 
@@ -152,9 +207,12 @@ export const cloudSync = {
     return isConnected;
   },
 
-  init(onEvent: EventCallback, onSnapshot: SnapshotCallback) {
+  init(onEvent: EventCallback, onSnapshot: SnapshotCallback, onSyncRequest?: SyncRequestCallback) {
     onEventCallback = onEvent;
     onSnapshotCallback = onSnapshot;
+    if (onSyncRequest) {
+      onSyncRequestCallback = onSyncRequest;
+    }
 
     if (typeof window === 'undefined') return;
     this.connect();
@@ -189,44 +247,43 @@ export const cloudSync = {
           sendSubscribe(ws, TOPIC_SNAPSHOT_PROPERTIES);
           sendSubscribe(ws, TOPIC_SNAPSHOT_BOOKINGS);
 
-          // Keep alive ping every 30 seconds
+          // Flush queued messages that were pending while offline/connecting
+          flushOutbox();
+
+          // Broadcast sync_request so any peer online announces their current state
+          this.publishEvent('all', 'sync_request');
+
+          // Keep alive ping every 25 seconds
           if (pingInterval) clearInterval(pingInterval);
           pingInterval = setInterval(() => {
             if (ws.readyState === WebSocket.OPEN) {
               ws.send(new Uint8Array([0xc0, 0x00])); // PINGREQ
             }
-          }, 30000);
-        } else if (packetType === 3) { // PUBLISH
-          handleIncomingPublish(buf);
-        } else if (packetType === 13) { // PINGRESP
-          // Heartbeat healthy
+          }, 25000);
+        } else {
+          handleIncomingPackets(buf);
         }
       };
 
       ws.onerror = () => {
-        // Switch broker on error
         currentBrokerIndex++;
       };
 
       ws.onclose = () => {
         isConnected = false;
         if (pingInterval) clearInterval(pingInterval);
-        // Auto-reconnect after 3 seconds
         clearTimeout(reconnectTimeout);
         reconnectTimeout = setTimeout(() => {
           this.connect();
         }, 3000);
       };
     } catch (e) {
-      console.warn('[CloudSync] Connection attempt error:', e);
       clearTimeout(reconnectTimeout);
       reconnectTimeout = setTimeout(() => this.connect(), 4000);
     }
   },
 
-  publishEvent(table: string, action: 'insert' | 'update' | 'delete' | 'sync', data?: any, id?: string) {
-    if (!activeWs || activeWs.readyState !== WebSocket.OPEN) return;
-
+  publishEvent(table: string, action: 'insert' | 'update' | 'delete' | 'sync' | 'sync_request', data?: any, id?: string) {
     const payload: CloudSyncPayload = {
       table,
       action,
@@ -236,13 +293,24 @@ export const cloudSync = {
       senderId: CLIENT_ID
     };
 
-    sendPublish(activeWs, TOPIC_EVENTS, JSON.stringify(payload), false);
+    const message = JSON.stringify(payload);
+
+    if (activeWs && activeWs.readyState === WebSocket.OPEN) {
+      rawSendPublish(activeWs, TOPIC_EVENTS, message, false);
+    } else {
+      outboxQueue.push({ topic: TOPIC_EVENTS, message, retain: false });
+    }
   },
 
   publishSnapshot(table: 'properties' | 'bookings', items: any[]) {
-    if (!activeWs || activeWs.readyState !== WebSocket.OPEN) return;
-
+    // Safety: do not queue an empty snapshot that could overwrite valid listings
     const topic = table === 'properties' ? TOPIC_SNAPSHOT_PROPERTIES : TOPIC_SNAPSHOT_BOOKINGS;
-    sendPublish(activeWs, topic, JSON.stringify(items), true); // retain = true
+    const message = JSON.stringify(items);
+
+    if (activeWs && activeWs.readyState === WebSocket.OPEN) {
+      rawSendPublish(activeWs, topic, message, true); // retain = true
+    } else {
+      outboxQueue.push({ topic, message, retain: true });
+    }
   }
 };

@@ -1,9 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 import { Property, Booking, Review, Conversation, Message, User, StaffAccount, StaffPermissions, ShiftHandover, IncidentReport, DatabaseHealthInfo } from '../types';
-import { MOCK_PROPERTIES, MOCK_BOOKINGS, MOCK_REVIEWS, MOCK_CONVERSATIONS, MOCK_MESSAGES, MOCK_USER, MOCK_RECEPTIONIST_USER, MOCK_MANAGER_USER } from '../data/mockData';
+import { MOCK_REVIEWS, MOCK_CONVERSATIONS, MOCK_MESSAGES, MOCK_USER, MOCK_RECEPTIONIST_USER, MOCK_MANAGER_USER } from '../data/mockData';
 import { notificationService } from './notificationService';
-import { broadcastDataChange, registerCacheRefresher, registerSnapshotHandler } from './realtimeSync';
+import { broadcastDataChange, registerCacheRefresher, registerSnapshotHandler, registerSyncRequestHandler } from './realtimeSync';
 import { cloudSync } from './cloudSync';
+import { cloudStorage } from './cloudStorage';
 
 const env = (typeof import.meta !== 'undefined' && import.meta.env) ? import.meta.env : {} as Record<string, string>;
 const supabaseUrl = env.VITE_SUPABASE_URL || 'https://placeholder.supabase.co';
@@ -968,6 +969,7 @@ export const dataService = {
     // 2. Broadcast change across all browser tabs and windows immediately
     broadcastDataChange('properties', 'insert', created);
     cloudSync.publishSnapshot('properties', localProperties);
+    cloudStorage.saveCloudProperties(localProperties);
 
     // 3. Sync to Supabase in background if online
     if (isSupabaseConfigured && isSupabaseReachable !== false) {
@@ -1031,6 +1033,7 @@ export const dataService = {
     // 2. Broadcast change across all browser tabs and windows
     broadcastDataChange('properties', 'update', localProperties[idx], id);
     cloudSync.publishSnapshot('properties', localProperties);
+    cloudStorage.saveCloudProperties(localProperties);
 
     // 3. Sync to Supabase in background if online and valid UUID
     if (isSupabaseConfigured && isUuid(id) && isSupabaseReachable !== false) {
@@ -1074,6 +1077,7 @@ export const dataService = {
     savePropertiesToStorage(localProperties);
     broadcastDataChange('properties', 'update', target, id);
     cloudSync.publishSnapshot('properties', localProperties);
+    cloudStorage.saveCloudProperties(localProperties);
 
     if (isSupabaseConfigured && isUuid(id) && isSupabaseReachable !== false) {
       try {
@@ -1091,6 +1095,7 @@ export const dataService = {
     savePropertiesToStorage(localProperties);
     broadcastDataChange('properties', 'delete', null, id);
     cloudSync.publishSnapshot('properties', localProperties);
+    cloudStorage.saveCloudProperties(localProperties, true);
 
     if (isSupabaseConfigured && isUuid(id) && isSupabaseReachable !== false) {
       try {
@@ -1142,6 +1147,31 @@ export const dataService = {
       }
     }
 
+    // Fallback: Query persistent global cloud storage if local is empty or Supabase is offline
+    if (localProperties.length === 0 || isSupabaseReachable === false) {
+      try {
+        const cloudProps = await cloudStorage.fetchCloudProperties();
+        if (cloudProps && cloudProps.length > 0) {
+          const localMap = new Map(localProperties.map(p => [p.id, p]));
+          let hasChanges = false;
+          for (const cp of cloudProps) {
+            if (!localMap.has(cp.id)) {
+              localMap.set(cp.id, cp);
+              hasChanges = true;
+            }
+          }
+          if (hasChanges) {
+            localProperties = Array.from(localMap.values());
+            savePropertiesToStorage(localProperties);
+          }
+        } else if (localProperties.length > 0) {
+          cloudStorage.saveCloudProperties(localProperties);
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+
     return localProperties.filter(p => {
       if (vertical && vertical !== 'all' && p.vertical !== vertical) return false;
       if (!includeDrafts && p.status === 'draft') return false;
@@ -1184,6 +1214,23 @@ export const dataService = {
       }
     }
 
+    // 3. Fallback: check global cloud storage
+    try {
+      const cloudList = await cloudStorage.fetchCloudProperties();
+      if (cloudList) {
+        const match = cloudList.find(p => p.id === id);
+        if (match) {
+          if (!localProperties.some(p => p.id === id)) {
+            localProperties.push(match);
+            savePropertiesToStorage(localProperties);
+          }
+          return match;
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+
     return null;
   },
 
@@ -1212,6 +1259,32 @@ export const dataService = {
         console.warn('Supabase getBookings timed out or offline, using persistent local bookings:', err);
       }
     }
+
+    // Fallback: check global cloud storage if local is empty or offline
+    if (localBookings.length === 0 || isSupabaseReachable === false) {
+      try {
+        const cloudBookings = await cloudStorage.fetchCloudBookings();
+        if (cloudBookings && cloudBookings.length > 0) {
+          const localMap = new Map(localBookings.map(b => [b.id, b]));
+          let hasChanges = false;
+          for (const cb of cloudBookings) {
+            if (!localMap.has(cb.id)) {
+              localMap.set(cb.id, cb);
+              hasChanges = true;
+            }
+          }
+          if (hasChanges) {
+            localBookings = Array.from(localMap.values());
+            saveBookingsToStorage(localBookings);
+          }
+        } else if (localBookings.length > 0) {
+          cloudStorage.saveCloudBookings(localBookings);
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+
     // Return local bookings with property references populated
     return localBookings.map(b => ({
       ...b,
@@ -1320,6 +1393,7 @@ export const dataService = {
 
     broadcastDataChange('bookings', 'insert', newBooking);
     cloudSync.publishSnapshot('bookings', localBookings);
+    cloudStorage.saveCloudBookings(localBookings);
     return newBooking;
   },
 
@@ -1347,6 +1421,8 @@ export const dataService = {
     }
 
     broadcastDataChange('bookings', 'update', target, bookingId);
+    cloudSync.publishSnapshot('bookings', localBookings);
+    cloudStorage.saveCloudBookings(localBookings);
   },
 
   async createWalkInBooking(walkIn: {
@@ -1446,6 +1522,7 @@ export const dataService = {
 
     broadcastDataChange('bookings', 'insert', newBooking);
     cloudSync.publishSnapshot('bookings', localBookings);
+    cloudStorage.saveCloudBookings(localBookings);
     return newBooking;
   },
 
@@ -1477,6 +1554,7 @@ export const dataService = {
 
     broadcastDataChange('bookings', 'update', target, bookingId);
     cloudSync.publishSnapshot('bookings', localBookings);
+    cloudStorage.saveCloudBookings(localBookings);
   },
 
   async checkOutGuest(bookingId: string): Promise<void> {
@@ -1507,6 +1585,7 @@ export const dataService = {
 
     broadcastDataChange('bookings', 'update', target, bookingId);
     cloudSync.publishSnapshot('bookings', localBookings);
+    cloudStorage.saveCloudBookings(localBookings);
   },
 
   async updateBookingStatus(bookingId: string, newStatus: 'upcoming' | 'active' | 'completed' | 'cancelled'): Promise<void> {
@@ -1538,6 +1617,7 @@ export const dataService = {
 
     broadcastDataChange('bookings', 'update', target, bookingId);
     cloudSync.publishSnapshot('bookings', localBookings);
+    cloudStorage.saveCloudBookings(localBookings);
   },
 
   async deleteBooking(bookingId: string): Promise<void> {
@@ -1557,6 +1637,7 @@ export const dataService = {
 
     broadcastDataChange('bookings', 'delete', null, bookingId);
     cloudSync.publishSnapshot('bookings', localBookings);
+    cloudStorage.saveCloudBookings(localBookings, true);
   },
 
   // Favorites
@@ -1823,12 +1904,97 @@ registerCacheRefresher(() => {
 });
 
 // Register cloud snapshot handler so remote devices receive listings upon connecting
+// Safety Rule: Empty snapshots NEVER wipe local properties
 registerSnapshotHandler((table, items) => {
-  if (table === 'properties' && Array.isArray(items)) {
-    localProperties = items;
-    savePropertiesToStorage(localProperties);
-  } else if (table === 'bookings' && Array.isArray(items)) {
-    localBookings = items;
-    saveBookingsToStorage(localBookings);
+  if (table === 'properties' && Array.isArray(items) && items.length > 0) {
+    const localMap = new Map(localProperties.map(p => [p.id, p]));
+    let hasNew = false;
+    for (const item of items) {
+      if (!localMap.has(item.id)) {
+        localMap.set(item.id, item);
+        hasNew = true;
+      }
+    }
+    if (hasNew || localProperties.length === 0) {
+      localProperties = Array.from(localMap.values());
+      savePropertiesToStorage(localProperties);
+    }
+  } else if (table === 'bookings' && Array.isArray(items) && items.length > 0) {
+    const localMap = new Map(localBookings.map(b => [b.id, b]));
+    let hasNew = false;
+    for (const item of items) {
+      if (!localMap.has(item.id)) {
+        localMap.set(item.id, item);
+        hasNew = true;
+      }
+    }
+    if (hasNew || localBookings.length === 0) {
+      localBookings = Array.from(localMap.values());
+      saveBookingsToStorage(localBookings);
+    }
   }
 });
+
+// Register peer sync request handler (when a new device opens, share active listings if we have them)
+registerSyncRequestHandler(() => {
+  if (localProperties.length > 0) {
+    cloudSync.publishSnapshot('properties', localProperties);
+    cloudStorage.saveCloudProperties(localProperties);
+  }
+  if (localBookings.length > 0) {
+    cloudSync.publishSnapshot('bookings', localBookings);
+    cloudStorage.saveCloudBookings(localBookings);
+  }
+});
+
+// Cold-Start Global Cloud Auto-Hydration
+// Ensures any device worldwide pulls the latest listings within milliseconds of opening
+if (typeof window !== 'undefined') {
+  setTimeout(async () => {
+    try {
+      const [cloudProps, cloudBookings] = await Promise.allSettled([
+        cloudStorage.fetchCloudProperties(),
+        cloudStorage.fetchCloudBookings()
+      ]);
+
+      if (cloudProps.status === 'fulfilled' && cloudProps.value && cloudProps.value.length > 0) {
+        const localMap = new Map(localProperties.map(p => [p.id, p]));
+        let hasChanges = false;
+        for (const cp of cloudProps.value) {
+          if (!localMap.has(cp.id)) {
+            localMap.set(cp.id, cp);
+            hasChanges = true;
+          }
+        }
+        if (hasChanges || localProperties.length === 0) {
+          localProperties = Array.from(localMap.values());
+          savePropertiesToStorage(localProperties);
+          broadcastDataChange('properties', 'sync');
+        }
+      } else if (localProperties.length > 0) {
+        // Self-heal cloud store from local if cloud was wiped
+        cloudStorage.saveCloudProperties(localProperties);
+      }
+
+      if (cloudBookings.status === 'fulfilled' && cloudBookings.value && cloudBookings.value.length > 0) {
+        const localMap = new Map(localBookings.map(b => [b.id, b]));
+        let hasChanges = false;
+        for (const cb of cloudBookings.value) {
+          if (!localMap.has(cb.id)) {
+            localMap.set(cb.id, cb);
+            hasChanges = true;
+          }
+        }
+        if (hasChanges || localBookings.length === 0) {
+          localBookings = Array.from(localMap.values());
+          saveBookingsToStorage(localBookings);
+          broadcastDataChange('bookings', 'sync');
+        }
+      } else if (localBookings.length > 0) {
+        cloudStorage.saveCloudBookings(localBookings);
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, 100);
+}
