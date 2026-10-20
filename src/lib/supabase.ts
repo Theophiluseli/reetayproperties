@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { Property, Booking, Review, Conversation, Message, User, StaffAccount, StaffPermissions, ShiftHandover, IncidentReport, DatabaseHealthInfo } from '../types';
+import { Property, Booking, Review, Conversation, Message, User, StaffAccount, StaffPermissions, ShiftHandover, IncidentReport, DatabaseHealthInfo, PropertyLiveStatus, PropertyStatusMeta } from '../types';
 import { MOCK_PROPERTIES, MOCK_REVIEWS, MOCK_CONVERSATIONS, MOCK_MESSAGES, MOCK_USER, MOCK_RECEPTIONIST_USER, MOCK_MANAGER_USER } from '../data/mockData';
 import { notificationService } from './notificationService';
 import { broadcastDataChange, registerCacheRefresher, registerSnapshotHandler, registerSyncRequestHandler } from './realtimeSync';
@@ -176,18 +176,8 @@ export const DEMO_PROPERTY_IDS = new Set([
 
 export const isDemoProperty = (p: any): boolean => {
   if (!p) return false;
+  if (p.is_demo === true) return true;
   if (p.id && DEMO_PROPERTY_IDS.has(p.id)) return true;
-  if (typeof p.id === 'string' && (p.id.startsWith('prop-') || p.id.startsWith('car-') || p.id.startsWith('exp-'))) return true;
-  const title = (p.title || '').toLowerCase();
-  if (
-    title.includes('the reetay grand penthouse') ||
-    title.includes('cantonments garden villa') ||
-    title.includes('labone modern glass loft') ||
-    title.includes('east legon executive sanctuary') ||
-    title.includes('aburi mountain ocean-view')
-  ) {
-    return true;
-  }
   return false;
 };
 
@@ -456,6 +446,7 @@ export const mapRowToProperty = (row: any): Property => {
     images: Array.isArray(row.images) && row.images.length > 0 ? row.images : ['https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=1000&q=80'],
     badge: row.badge || '',
     status: row.status || 'published',
+    operational_status: row.operational_status || 'available',
     rating: Number(row.rating || 5.0),
     review_count: Number(row.review_count || 0),
     host: row.host || {
@@ -463,6 +454,87 @@ export const mapRowToProperty = (row: any): Property => {
       avatar: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=200&q=80',
       superhost: true
     }
+  };
+};
+
+/**
+ * Computes the real-time operational availability status for any property listing.
+ * Considers explicit operational status (maintenance, cleaning, occupied) as well as
+ * real-time bookings (guest checked in today, active reservation).
+ */
+export const getPropertyLiveStatus = (property: Property, bookingsList?: Booking[]): PropertyStatusMeta => {
+  if (property.status === 'draft') {
+    return {
+      status: 'draft',
+      label: 'Draft',
+      badgeBg: 'bg-gray-100',
+      badgeText: 'text-gray-600',
+      dotColor: 'bg-gray-400'
+    };
+  }
+
+  // Under Maintenance overrides calendar
+  if (property.operational_status === 'maintenance') {
+    return {
+      status: 'maintenance',
+      label: 'Under Maintenance',
+      badgeBg: 'bg-purple-100',
+      badgeText: 'text-purple-800',
+      dotColor: 'bg-purple-500'
+    };
+  }
+
+  // Cleaning / Turnover
+  if (property.operational_status === 'cleaning') {
+    return {
+      status: 'cleaning',
+      label: 'Cleaning',
+      badgeBg: 'bg-cyan-100',
+      badgeText: 'text-cyan-800',
+      dotColor: 'bg-cyan-500'
+    };
+  }
+
+  const today = new Date().toISOString().split('T')[0];
+  const list = bookingsList || localBookings;
+  const propertyBookings = list.filter(b => b.property_id === property.id && b.status !== 'cancelled');
+
+  // Check if currently occupied by a guest today (checked in or active booking spanning today)
+  const isOccupiedToday = propertyBookings.some(b => {
+    if (b.arrival_status === 'checked_in') return true;
+    if (b.status === 'active') return true;
+    if (b.check_in <= today && b.check_out >= today) return true;
+    return false;
+  });
+
+  if (isOccupiedToday || property.operational_status === 'occupied') {
+    return {
+      status: 'occupied',
+      label: 'Occupied',
+      badgeBg: 'bg-rose-100',
+      badgeText: 'text-rose-800',
+      dotColor: 'bg-rose-500'
+    };
+  }
+
+  // Check if upcoming booking confirmed
+  const isBookedUpcoming = propertyBookings.some(b => b.status === 'upcoming' && b.check_in >= today);
+  if (isBookedUpcoming || property.operational_status === 'booked') {
+    return {
+      status: 'booked',
+      label: 'Booked',
+      badgeBg: 'bg-amber-100',
+      badgeText: 'text-amber-800',
+      dotColor: 'bg-amber-500'
+    };
+  }
+
+  return {
+    status: 'available',
+    label: 'Available',
+    badgeBg: 'bg-emerald-100',
+    badgeText: 'text-emerald-800',
+    dotColor: 'bg-emerald-500'
   };
 };
 
@@ -1008,6 +1080,7 @@ export const dataService = {
       images: newProp.images?.length ? newProp.images : ['https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&w=1000&q=80'],
       badge: newProp.badge || '',
       status: newProp.status || 'published',
+      operational_status: newProp.operational_status || 'available',
       rating: newProp.rating || 5.0,
       review_count: newProp.review_count || 0,
       host: newProp.host || {
@@ -1051,7 +1124,8 @@ export const dataService = {
             badge: created.badge,
             rating: created.rating,
             review_count: created.review_count,
-            status: created.status
+            status: created.status,
+            operational_status: created.operational_status
           }),
           2000
         );
@@ -1076,6 +1150,8 @@ export const dataService = {
       bedrooms: updates.bedrooms !== undefined ? Number(updates.bedrooms) : localProperties[idx].bedrooms,
       beds: updates.beds !== undefined ? Number(updates.beds) : localProperties[idx].beds,
       bathrooms: updates.bathrooms !== undefined ? Number(updates.bathrooms) : localProperties[idx].bathrooms,
+      status: updates.status !== undefined ? updates.status : localProperties[idx].status,
+      operational_status: updates.operational_status !== undefined ? updates.operational_status : localProperties[idx].operational_status,
       location: {
         ...localProperties[idx].location,
         ...(updates.location || {})
@@ -1112,10 +1188,48 @@ export const dataService = {
         if (updates.images !== undefined) updatePayload.images = updates.images;
         if (updates.badge !== undefined) updatePayload.badge = updates.badge;
         if (updates.status !== undefined) updatePayload.status = updates.status;
+        if (updates.operational_status !== undefined) updatePayload.operational_status = updates.operational_status;
 
         await withTimeout(supabase.from('properties').update(updatePayload).eq('id', id), 2000);
       } catch (err) {
         console.warn('Note: Could not update property in remote Supabase:', err);
+      }
+    }
+
+    return localProperties[idx];
+  },
+
+  async updatePropertyStatus(
+    id: string,
+    updates: {
+      status?: 'published' | 'draft';
+      operational_status?: 'available' | 'occupied' | 'booked' | 'maintenance' | 'cleaning';
+    }
+  ): Promise<Property | null> {
+    const idx = localProperties.findIndex(p => p.id === id);
+    if (idx === -1) return null;
+
+    if (updates.status !== undefined) {
+      localProperties[idx].status = updates.status;
+    }
+    if (updates.operational_status !== undefined) {
+      localProperties[idx].operational_status = updates.operational_status;
+    }
+
+    // Persist and broadcast
+    savePropertiesToStorage(localProperties);
+    broadcastDataChange('properties', 'update', localProperties[idx], id);
+    cloudSync.publishSnapshot('properties', localProperties);
+    cloudStorage.saveCloudProperties(localProperties);
+
+    if (isSupabaseConfigured && isUuid(id) && isSupabaseReachable !== false) {
+      try {
+        const payload: Record<string, any> = {};
+        if (updates.status !== undefined) payload.status = updates.status;
+        if (updates.operational_status !== undefined) payload.operational_status = updates.operational_status;
+        await withTimeout(supabase.from('properties').update(payload).eq('id', id), 2000);
+      } catch (err) {
+        console.warn('Note: Could not update property status in remote Supabase:', err);
       }
     }
 
@@ -1182,7 +1296,10 @@ export const dataService = {
   ): Promise<Property[]> {
     if (isSupabaseConfigured && isSupabaseReachable !== false) {
       try {
-        let req = supabase.from('properties').select('*').eq('vertical', vertical);
+        let req = supabase.from('properties').select('*');
+        if (vertical && vertical !== 'all') {
+          req = req.eq('vertical', vertical);
+        }
         if (query) {
           req = req.or(`title.ilike.%${query}%,description.ilike.%${query}%,city.ilike.%${query}%,area.ilike.%${query}%`);
         }
@@ -1455,20 +1572,24 @@ export const dataService = {
   },
 
   async confirmBookingPayment(bookingId: string): Promise<void> {
+    await this.updateBookingPaymentStatus(bookingId, 'paid');
+  },
+
+  async updateBookingPaymentStatus(bookingId: string, paymentStatus: 'paid' | 'pending' | 'refunded'): Promise<void> {
     const target = localBookings.find(b => b.id === bookingId);
     if (target) {
-      target.payment_status = 'paid';
-      target.status = 'upcoming';
+      target.payment_status = paymentStatus;
+      if (paymentStatus === 'paid' && target.status !== 'cancelled') {
+        notificationService.dispatchBookingNotification(target, 'confirmed');
+      }
       saveBookingsToStorage(localBookings);
-      notificationService.dispatchBookingNotification(target, 'confirmed');
     }
 
     if (isSupabaseConfigured && isSupabaseReachable !== false) {
       try {
         await withTimeout(
           supabase.from('bookings').update({
-            payment_status: 'paid',
-            status: 'upcoming'
+            payment_status: paymentStatus
           }).eq('id', bookingId),
           2000
         );

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Property } from '../types';
-import { dataService } from '../lib/supabase';
+import { dataService, getPropertyLiveStatus } from '../lib/supabase';
 import { ShareModal } from '../components/common/ShareModal';
 import { FeatureIcon } from '../components/common/FeatureIcon';
 import { DualCalendarPicker } from '../components/search/DualCalendarPicker';
@@ -108,6 +108,8 @@ export const CarDetailPage: React.FC<CarDetailPageProps> = ({ property }) => {
     });
   };
 
+  const liveStatus = getPropertyLiveStatus(property);
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-28 lg:pb-8 space-y-8 animate-in fade-in">
       
@@ -123,11 +125,38 @@ export const CarDetailPage: React.FC<CarDetailPageProps> = ({ property }) => {
             <span className="text-gray-900 font-bold truncate max-w-md">{property.title}</span>
           </div>
 
-          <div className="flex items-center gap-3 pt-0.5">
+          <div className="flex flex-wrap items-center gap-2 pt-0.5">
             <span className="px-3 py-1 rounded-md text-[10px] font-black uppercase bg-[#1D2B44] text-white flex items-center gap-1.5 shadow-sm">
               <Zap className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
               <span>Instant Booking</span>
             </span>
+
+            {/* Live Operational Status Badge */}
+            <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm border ${
+              liveStatus.status === 'available'
+                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                : liveStatus.status === 'occupied'
+                ? 'bg-rose-50 text-rose-800 border-rose-200'
+                : liveStatus.status === 'booked'
+                ? 'bg-amber-50 text-amber-800 border-amber-200'
+                : liveStatus.status === 'maintenance'
+                ? 'bg-purple-50 text-purple-800 border-purple-200'
+                : 'bg-cyan-50 text-cyan-800 border-cyan-200'
+            }`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${
+                liveStatus.status === 'available' ? 'bg-emerald-500 animate-pulse' :
+                liveStatus.status === 'occupied' ? 'bg-rose-500' :
+                liveStatus.status === 'booked' ? 'bg-amber-500' :
+                liveStatus.status === 'maintenance' ? 'bg-purple-600' : 'bg-cyan-500'
+              }`} />
+              <span>{liveStatus.label}</span>
+            </span>
+
+            {property.badge && (
+              <span className="px-3 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-gold-400 text-navy-950 shadow-sm">
+                {property.badge}
+              </span>
+            )}
           </div>
 
           <h1 className="text-xl sm:text-3xl font-black text-[#2E0854] tracking-tight leading-tight">

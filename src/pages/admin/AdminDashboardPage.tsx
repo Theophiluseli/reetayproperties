@@ -146,6 +146,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ adminUse
   const [newGalleryUrlInput, setNewGalleryUrlInput] = useState('');
   const [propDescription, setPropDescription] = useState('');
   const [propStatus, setPropStatus] = useState<'published' | 'draft'>('published');
+  const [propOperationalStatus, setPropOperationalStatus] = useState<'available' | 'occupied' | 'booked' | 'maintenance' | 'cleaning'>('available');
 
   // Car specific state
   const [propFuelType, setPropFuelType] = useState<'Petrol' | 'Diesel' | 'Hybrid' | 'Electric'>('Petrol');
@@ -559,6 +560,7 @@ Password: ${staff.password || 'staff123'}`;
         : ['WiFi', 'Air-condition', 'Fully Equipped Kitchen', 'Swimming Pool', '24/7 Security']
     );
     setPropStatus('published');
+    setPropOperationalStatus('available');
     setShowPropertyModal(true);
   };
 
@@ -576,6 +578,7 @@ Password: ${staff.password || 'staff123'}`;
     setPropDescription(prop.description);
     setPropBadge(prop.badge || '');
     setPropStatus(prop.status || 'published');
+    setPropOperationalStatus(prop.operational_status || 'available');
     setPropFuelType(prop.fuel_type || 'Petrol');
     setPropTransmission(prop.transmission || 'Automatic');
     setPropVehicleType(prop.vehicle_type || 'SUV');
@@ -599,6 +602,7 @@ Password: ${staff.password || 'staff123'}`;
       price_per_night: Number(propPrice),
       price_unit_label: propUnitLabel,
       status: propStatus,
+      operational_status: propOperationalStatus,
       location: {
         city: propCity,
         area: propArea,
@@ -673,6 +677,11 @@ Password: ${staff.password || 'staff123'}`;
 
   const handleToggleStatus = async (id: string) => {
     await dataService.togglePropertyStatus(id);
+    loadAdminData();
+  };
+
+  const handleOperationalStatusChange = async (id: string, newOpStatus: 'available' | 'occupied' | 'booked' | 'maintenance' | 'cleaning') => {
+    await dataService.updatePropertyStatus(id, { operational_status: newOpStatus });
     loadAdminData();
   };
 
@@ -1095,7 +1104,8 @@ Password: ${staff.password || 'staff123'}`;
                   <th className="p-4">Location</th>
                   <th className="p-4">Price & Label</th>
                   <th className="p-4">Rating</th>
-                  <th className="p-4">Status</th>
+                  <th className="p-4">Visibility</th>
+                  <th className="p-4">Live Status</th>
                   <th className="p-4 text-right">Actions</th>
                 </tr>
               </thead>
@@ -1133,9 +1143,35 @@ Password: ${staff.password || 'staff123'}`;
                         className={`px-3 py-1 rounded-full text-[10px] font-black uppercase transition-all ${
                           p.status === 'published' ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                         }`}
+                        title="Toggle Published / Draft"
                       >
                         {p.status || 'published'}
                       </button>
+                    </td>
+
+                    <td className="p-4">
+                      <select
+                        value={p.operational_status || 'available'}
+                        onChange={(e) => handleOperationalStatusChange(p.id, e.target.value as any)}
+                        className={`text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-xl border outline-none cursor-pointer transition-all ${
+                          (p.operational_status || 'available') === 'available'
+                            ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                            : p.operational_status === 'occupied'
+                            ? 'bg-rose-50 text-rose-800 border-rose-300 hover:bg-rose-100'
+                            : p.operational_status === 'booked'
+                            ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
+                            : p.operational_status === 'maintenance'
+                            ? 'bg-purple-50 text-purple-800 border-purple-300 hover:bg-purple-100'
+                            : 'bg-cyan-50 text-cyan-800 border-cyan-300 hover:bg-cyan-100'
+                        }`}
+                        title="Update Live Operational Status"
+                      >
+                        <option value="available">● Available</option>
+                        <option value="occupied">● Occupied</option>
+                        <option value="booked">● Booked</option>
+                        <option value="maintenance">● Maintenance</option>
+                        <option value="cleaning">● Cleaning</option>
+                      </select>
                     </td>
 
                     <td className="p-4 text-right whitespace-nowrap">
@@ -2146,6 +2182,73 @@ Password: ${staff.password || 'staff123'}`;
                     onChange={(e) => setPropBadge(e.target.value)}
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-navy-950 outline-none"
                   />
+                </div>
+              </div>
+
+              {/* Operational Availability Status Selector */}
+              <div>
+                <label className="text-[10px] uppercase font-bold text-gray-400 block mb-1">Operational Availability Status</label>
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPropOperationalStatus('available')}
+                    className={`py-2 px-2 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                      propOperationalStatus === 'available'
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                        : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                    <span>Available</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPropOperationalStatus('occupied')}
+                    className={`py-2 px-2 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                      propOperationalStatus === 'occupied'
+                        ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
+                        : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-rose-400"></span>
+                    <span>Occupied</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPropOperationalStatus('booked')}
+                    className={`py-2 px-2 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                      propOperationalStatus === 'booked'
+                        ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
+                        : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                    <span>Booked</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPropOperationalStatus('maintenance')}
+                    className={`py-2 px-2 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                      propOperationalStatus === 'maintenance'
+                        ? 'bg-purple-700 text-white border-purple-700 shadow-sm'
+                        : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-purple-400"></span>
+                    <span>Maintenance</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPropOperationalStatus('cleaning')}
+                    className={`py-2 px-2 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                      propOperationalStatus === 'cleaning'
+                        ? 'bg-cyan-600 text-white border-cyan-600 shadow-sm'
+                        : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
+                    <span>Cleaning</span>
+                  </button>
                 </div>
               </div>
 

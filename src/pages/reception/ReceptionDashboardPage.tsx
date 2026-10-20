@@ -381,11 +381,20 @@ export const ReceptionDashboardPage: React.FC<ReceptionDashboardPageProps> = ({ 
                   className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-navy-950 outline-none cursor-pointer"
                   required
                 >
-                  {properties.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.title} (${p.price_per_night}/night) - {p.location.area}
-                    </option>
-                  ))}
+                  {properties.map((p) => {
+                    const statusTag = p.operational_status === 'occupied' 
+                      ? '[OCCUPIED]' 
+                      : p.operational_status === 'maintenance'
+                      ? '[MAINTENANCE]'
+                      : p.operational_status === 'cleaning'
+                      ? '[CLEANING]'
+                      : '[AVAILABLE]';
+                    return (
+                      <option key={p.id} value={p.id}>
+                        {statusTag} {p.title} (${p.price_per_night}/night) - {p.location.area}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 

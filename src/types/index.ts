@@ -107,6 +107,7 @@ export interface Property {
   house_rules?: string[];
   badge?: string;
   status: 'published' | 'draft';
+  operational_status?: 'available' | 'occupied' | 'booked' | 'maintenance' | 'cleaning';
   rating: number;
   review_count: number;
   host: {
@@ -114,6 +115,16 @@ export interface Property {
     avatar: string;
     superhost: boolean;
   };
+}
+
+export type PropertyLiveStatus = 'available' | 'occupied' | 'booked' | 'maintenance' | 'cleaning' | 'draft';
+
+export interface PropertyStatusMeta {
+  status: PropertyLiveStatus;
+  label: string;
+  badgeBg: string;
+  badgeText: string;
+  dotColor: string;
 }
 
 export interface Booking {
@@ -217,3 +228,4 @@ export interface IncidentReport {
   estimated_penalty?: number;
   status: 'pending_review' | 'resolved';
 }
+

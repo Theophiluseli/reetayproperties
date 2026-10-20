@@ -334,7 +334,7 @@ export const useRealtimeSync = (
 
       const filterTables = tablesKey ? tablesKey.split(',') : [];
       // Match all or specific tables
-      if (filterTables.length === 0 || filterTables.includes('*') || filterTables.includes(payload.table)) {
+      if (filterTables.length === 0 || filterTables.includes('*') || payload.table === 'all' || filterTables.includes(payload.table)) {
         onSyncRef.current(payload);
       }
     };

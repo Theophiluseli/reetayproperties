@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Heart, Share2, MapPin, Users, Bed, DoorClosed, Bath, ChevronLeft, ChevronRight, Fuel, Sliders, Star, ArrowRight } from 'lucide-react';
 import { Property } from '../../types';
 import { ShareModal } from '../common/ShareModal';
+import { getPropertyLiveStatus } from '../../lib/supabase';
 
 interface ListingCardProps {
   property: Property;
@@ -12,6 +13,8 @@ export const ListingCard: React.FC<ListingCardProps> = ({ property }) => {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isFavorite, setIsFavorite] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+
+  const liveStatus = getPropertyLiveStatus(property);
 
   const isCar = property.vertical === 'cars';
 
@@ -71,16 +74,31 @@ export const ListingCard: React.FC<ListingCardProps> = ({ property }) => {
             </div>
           )}
 
-          {/* Top-Left Rating Star Badge (if rated) */}
-          {property.rating >= 4.9 && (
-            <div className="absolute top-4 left-4 z-10">
-              <span className="px-2.5 py-1 rounded-full text-[11px] font-black bg-white/95 text-navy-950 shadow-md flex items-center gap-1 border border-gray-100">
-                <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                <span>{property.rating.toFixed(1)}</span>
-                <span className="text-gray-400 font-normal">({property.review_count || 1})</span>
+          {/* Top-Left Badges: Live Status & Promo Badge */}
+          <div className="absolute top-4 left-4 z-10 flex flex-col items-start gap-1.5">
+            <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider shadow-md flex items-center gap-1.5 backdrop-blur-md border border-white/30 ${
+              liveStatus.status === 'available'
+                ? 'bg-emerald-600/90 text-white'
+                : liveStatus.status === 'occupied'
+                ? 'bg-rose-600/90 text-white'
+                : liveStatus.status === 'booked'
+                ? 'bg-amber-600/90 text-white'
+                : liveStatus.status === 'maintenance'
+                ? 'bg-purple-700/90 text-white'
+                : 'bg-navy-950/90 text-white'
+            }`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${
+                liveStatus.status === 'available' ? 'bg-emerald-200 animate-pulse' : 'bg-white'
+              }`} />
+              <span>{liveStatus.label}</span>
+            </span>
+
+            {property.badge && (
+              <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-gold-400 text-navy-950 shadow-md">
+                {property.badge}
               </span>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Top-Right Action Buttons: Share & Heart */}
           <div className="absolute top-4 right-4 flex items-center gap-2 z-10">

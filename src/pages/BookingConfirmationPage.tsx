@@ -5,6 +5,7 @@ import { CheckCircle2, Calendar, MapPin, Download, LayoutDashboard, QrCode, Shie
 import { ReetayLogo } from '../components/common/ReetayLogo';
 import { AuthModal } from '../components/auth/AuthModal';
 import { dataService } from '../lib/supabase';
+import { useRealtimeSync } from '../lib/realtimeSync';
 
 interface BookingConfirmationPageProps {
   currentUser?: User | null;
@@ -16,18 +17,36 @@ export const BookingConfirmationPage: React.FC<BookingConfirmationPageProps> = (
   const location = useLocation();
   const { id } = useParams<{ id: string }>();
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const passedBooking = (location.state as { booking: Booking })?.booking;
   const [booking, setBooking] = useState<Booking | null>(passedBooking || null);
 
-  React.useEffect(() => {
-    if (!booking && id) {
-      dataService.getBookings().then((allBookings: Booking[]) => {
-        const found = allBookings.find((b: Booking) => b.id.toLowerCase() === id.toLowerCase());
-        if (found) setBooking(found);
-      });
+  const refreshBooking = async () => {
+    const targetId = booking?.id || id;
+    if (!targetId) return;
+    try {
+      setIsRefreshing(true);
+      const allBookings = await dataService.getBookings();
+      const found = allBookings.find((b: Booking) => b.id.toLowerCase() === targetId.toLowerCase());
+      if (found) {
+        setBooking(found);
+      }
+    } finally {
+      setIsRefreshing(false);
     }
-  }, [id, booking]);
+  };
+
+  // Real-time synchronization: when admin marks payment as paid or confirms booking, page flips instantly
+  useRealtimeSync(['bookings', 'properties'], () => {
+    refreshBooking();
+  });
+
+  React.useEffect(() => {
+    refreshBooking();
+    const interval = setInterval(refreshBooking, 5000);
+    return () => clearInterval(interval);
+  }, [id]);
 
   const isConfirmed = booking ? booking.payment_status === 'paid' : false;
 
@@ -74,6 +93,17 @@ export const BookingConfirmationPage: React.FC<BookingConfirmationPageProps> = (
             </p>
             <div className="inline-block bg-amber-100/70 px-4 py-1.5 rounded-full text-xs font-mono font-bold text-amber-950 border border-amber-200 mt-2">
               Reservation Ref: #RET-REQ-{(booking?.id || id || 'BK-89021').toUpperCase()}
+            </div>
+            <div className="pt-2 flex items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={refreshBooking}
+                disabled={isRefreshing}
+                className="px-4 py-2 bg-navy-950 text-white rounded-full text-xs font-bold hover:bg-navy-900 transition-all flex items-center gap-1.5 shadow-md active:scale-95"
+              >
+                <Clock className={`w-3.5 h-3.5 text-gold-400 ${isRefreshing ? 'animate-spin' : ''}`} />
+                <span>{isRefreshing ? 'Checking Status...' : 'Check Live Status'}</span>
+              </button>
             </div>
           </div>
         </>

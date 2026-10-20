@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Property, Review } from '../types';
-import { dataService } from '../lib/supabase';
+import { dataService, getPropertyLiveStatus } from '../lib/supabase';
 import { useRealtimeSync } from '../lib/realtimeSync';
 import { LeafletMapView } from '../components/map/LeafletMapView';
 import { FeatureIcon } from '../components/common/FeatureIcon';
@@ -149,6 +149,8 @@ export const PropertyDetailPage: React.FC = () => {
     setShowAllPhotosModal(true);
   };
 
+  const liveStatus = getPropertyLiveStatus(property);
+
   return (
     <div className="min-h-screen bg-white pb-28 lg:pb-20 font-sans">
       
@@ -179,11 +181,41 @@ export const PropertyDetailPage: React.FC = () => {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6 space-y-4 sm:space-y-6">
         
-        {/* Title Header */}
-        <div className="space-y-1.5">
-          <h1 className="text-xl sm:text-3xl lg:text-4xl font-black text-[#2E0854] tracking-tight leading-tight">
-            {property.title}
-          </h1>
+        {/* Title Header & Status Badges */}
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-xl sm:text-3xl lg:text-4xl font-black text-[#2E0854] tracking-tight leading-tight">
+              {property.title}
+            </h1>
+
+            {/* Live Operational Status Badge */}
+            <span className={`px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm border ${
+              liveStatus.status === 'available'
+                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                : liveStatus.status === 'occupied'
+                ? 'bg-rose-50 text-rose-800 border-rose-200'
+                : liveStatus.status === 'booked'
+                ? 'bg-amber-50 text-amber-800 border-amber-200'
+                : liveStatus.status === 'maintenance'
+                ? 'bg-purple-50 text-purple-800 border-purple-200'
+                : 'bg-cyan-50 text-cyan-800 border-cyan-200'
+            }`}>
+              <span className={`w-2 h-2 rounded-full ${
+                liveStatus.status === 'available' ? 'bg-emerald-500 animate-pulse' :
+                liveStatus.status === 'occupied' ? 'bg-rose-500' :
+                liveStatus.status === 'booked' ? 'bg-amber-500' :
+                liveStatus.status === 'maintenance' ? 'bg-purple-600' : 'bg-cyan-500'
+              }`} />
+              <span>{liveStatus.label}</span>
+            </span>
+
+            {property.badge && (
+              <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-gold-400 text-navy-950 shadow-sm">
+                {property.badge}
+              </span>
+            )}
+          </div>
+
           <div className="flex flex-wrap items-center gap-3 text-xs font-semibold text-gray-600">
             <div className="flex items-center gap-1 text-navy-950 font-bold">
               <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
@@ -197,6 +229,14 @@ export const PropertyDetailPage: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* Maintenance / Notice Banner */}
+        {liveStatus.status === 'maintenance' && (
+          <div className="bg-purple-50 border border-purple-200 rounded-2xl p-4 flex items-center gap-3 text-purple-900 text-xs font-bold animate-in fade-in">
+            <span className="w-2.5 h-2.5 rounded-full bg-purple-600 animate-pulse shrink-0"></span>
+            <span>Notice: This suite is currently undergoing routine maintenance. Please contact concierge for alternative suites or earliest check-in date.</span>
+          </div>
+        )}
 
         {/* Photo Gallery Grid (Optimized Mobile Hero View) */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3 rounded-3xl overflow-hidden relative border border-gray-100 shadow-sm">
