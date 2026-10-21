@@ -39,12 +39,27 @@ export const registerSnapshotHandler = (cb: SnapshotCallback) => {
   snapshotCallback = cb;
 };
 
+// Registry of mutation handlers (applying inserts/updates/deletes directly into local cache)
+type MutationHandler = (table: string, action: string, data?: any, id?: string) => void;
+let mutationHandler: MutationHandler | null = null;
+
+export const registerMutationHandler = (cb: MutationHandler) => {
+  mutationHandler = cb;
+};
+
 // Initialize BroadcastChannel immediately in browser environment for 0ms cross-tab sync
 if (typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined') {
   try {
     broadcastChannel = new BroadcastChannel('reetay_broadcast_sync_channel');
     broadcastChannel.onmessage = (event: MessageEvent<SyncPayload>) => {
       if (event?.data) {
+        if (mutationHandler) {
+          try {
+            mutationHandler(event.data.table, event.data.action, event.data.data, event.data.id);
+          } catch (e) {
+            // ignore
+          }
+        }
         if (cacheRefreshCallback) {
           try {
             cacheRefreshCallback();
@@ -66,6 +81,9 @@ if (typeof window !== 'undefined') {
     if (event.key === STORAGE_SYNC_KEY && event.newValue) {
       try {
         const payload: SyncPayload = JSON.parse(event.newValue);
+        if (mutationHandler) {
+          mutationHandler(payload.table, payload.action, payload.data, payload.id);
+        }
         if (cacheRefreshCallback) {
           cacheRefreshCallback();
         }
@@ -95,6 +113,7 @@ if (typeof window !== 'undefined') {
         // ignore
       }
     }
+    cloudSync.requestPeerSync();
     dispatchDomSyncEvent({ table: 'all', action: 'sync', timestamp: Date.now() });
   });
 
@@ -108,10 +127,18 @@ if (typeof window !== 'undefined') {
             // ignore
           }
         }
+        cloudSync.requestPeerSync();
         dispatchDomSyncEvent({ table: 'all', action: 'sync', timestamp: Date.now() });
       }
     });
   }
+
+  // Periodic heartbeat every 15s to ensure background synchronization across idle tabs/devices
+  setInterval(() => {
+    if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+      cloudSync.requestPeerSync();
+    }
+  }, 15000);
 }
 
 // Initialize Global Cross-Device Cloud Sync immediately in browser
@@ -120,6 +147,13 @@ if (typeof window !== 'undefined') {
     cloudSync.init(
       // On real-time mutation from any remote device anywhere in the world
       (cloudPayload) => {
+        if (mutationHandler) {
+          try {
+            mutationHandler(cloudPayload.table, cloudPayload.action, cloudPayload.data, cloudPayload.id);
+          } catch (e) {
+            console.error('Error applying cloud mutation:', e);
+          }
+        }
         if (cacheRefreshCallback) {
           try {
             cacheRefreshCallback();
@@ -170,33 +204,40 @@ if (typeof window !== 'undefined') {
       }
     );
   } catch (err) {
-    console.warn('CloudSync init error:', err);
+    console.warn('Cloud sync initialization failed:', err);
   }
 }
 
 /**
- * Initialize the global Supabase Realtime channel for WebSocket broadcast and Postgres database events.
+ * Initialize Supabase Realtime channel once globally
  */
 export const initRealtimeSync = () => {
-  if (globalChannel || !isSupabaseConfigured) return;
+  if (typeof window === 'undefined') return;
+  if (globalChannel) return;
+
+  if (!isSupabaseConfigured) {
+    return;
+  }
 
   try {
     globalChannel = supabase.channel(SYNC_CHANNEL_NAME, {
       config: {
-        broadcast: {
-          self: false,
-          ack: false
-        }
+        broadcast: { ack: true, self: false },
+        presence: { key: 'reetay-client' }
       }
     });
 
-    // 1. Listen for instant WebSocket broadcasts from other remote devices
-    globalChannel.on('broadcast', { event: SYNC_EVENT_NAME }, (payload: { payload: SyncPayload }) => {
-      if (payload?.payload) {
+    // 1. Listen for Supabase Broadcast events
+    globalChannel.on('broadcast', { event: SYNC_EVENT_NAME }, (response) => {
+      if (response?.payload) {
+        const payload: SyncPayload = response.payload;
+        if (mutationHandler) {
+          mutationHandler(payload.table, payload.action, payload.data, payload.id);
+        }
         if (cacheRefreshCallback) {
           cacheRefreshCallback();
         }
-        dispatchDomSyncEvent(payload.payload);
+        dispatchDomSyncEvent(payload);
       }
     });
 
@@ -219,6 +260,9 @@ export const initRealtimeSync = () => {
             id: (dbPayload.new as any)?.id || (dbPayload.old as any)?.id,
             timestamp: Date.now()
           };
+          if (mutationHandler) {
+            mutationHandler(syncData.table, syncData.action, syncData.data, syncData.id);
+          }
           if (cacheRefreshCallback) {
             cacheRefreshCallback();
           }

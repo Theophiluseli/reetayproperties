@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { Property, Booking, Review, Conversation, Message, User, StaffAccount, StaffPermissions, ShiftHandover, IncidentReport, DatabaseHealthInfo, PropertyLiveStatus, PropertyStatusMeta } from '../types';
 import { MOCK_PROPERTIES, MOCK_REVIEWS, MOCK_CONVERSATIONS, MOCK_MESSAGES, MOCK_USER, MOCK_RECEPTIONIST_USER, MOCK_MANAGER_USER } from '../data/mockData';
 import { notificationService } from './notificationService';
-import { broadcastDataChange, registerCacheRefresher, registerSnapshotHandler, registerSyncRequestHandler } from './realtimeSync';
+import { broadcastDataChange, registerCacheRefresher, registerSnapshotHandler, registerSyncRequestHandler, registerMutationHandler } from './realtimeSync';
 import { cloudSync } from './cloudSync';
 import { cloudStorage } from './cloudStorage';
 
@@ -547,15 +547,35 @@ export const getPropertyLiveStatus = (property: Property, bookingsList?: Booking
   };
 };
 
-// Supabase reachability state for circuit breaker
+// Supabase reachability state with smart recovery and automatic backoff
 export let isSupabaseReachable: boolean | null = null;
-let lastReachabilityCheck = 0;
+let lastSupabaseFailureTime = 0;
+const SUPABASE_RETRY_INTERVAL_MS = 15000; // Auto-retry after 15 seconds
+
+export const shouldAttemptSupabase = (): boolean => {
+  if (!isSupabaseConfigured) return false;
+  if (isSupabaseReachable === true || isSupabaseReachable === null) return true;
+  // If previously failed, allow retry if 15 seconds have passed
+  return Date.now() - lastSupabaseFailureTime > SUPABASE_RETRY_INTERVAL_MS;
+};
+
+export const markSupabaseSuccess = () => {
+  isSupabaseReachable = true;
+};
+
+export const markSupabaseFailure = (err?: any) => {
+  isSupabaseReachable = false;
+  lastSupabaseFailureTime = Date.now();
+  if (err) {
+    console.warn('⚠️ [Supabase] Database unreachable or timed out, serving high-speed local/cloud cache (will retry in 15s):', err?.message || err);
+  }
+};
 
 export const setSupabaseReachableStatus = (status: boolean) => {
   isSupabaseReachable = status;
 };
 
-const withTimeout = <T>(promise: PromiseLike<T>, timeoutMs = 2000): Promise<T> => {
+const withTimeout = <T>(promise: PromiseLike<T>, timeoutMs = 8000): Promise<T> => {
   return Promise.race([
     Promise.resolve(promise),
     new Promise<T>((_, reject) =>
@@ -1107,48 +1127,60 @@ export const dataService = {
       }
     };
 
-    // 1. Immediately store in local memory and persist to localStorage
+    (created as any)._localCreated = Date.now();
+
+    // 1. Immediately store in local memory and persist to localStorage (instant 0ms response)
     localProperties.unshift(created);
     savePropertiesToStorage(localProperties);
 
-    // 2. Broadcast change across all browser tabs and windows immediately
+    // 2. Broadcast change across all browser tabs and windows on THIS device
     broadcastDataChange('properties', 'insert', created);
+
+    // 3. Immediately broadcast across ALL devices worldwide via WebSocket mesh
+    cloudSync.publishEvent('properties', 'insert', created);
     cloudSync.publishSnapshot('properties', localProperties);
     cloudStorage.saveCloudProperties(localProperties);
 
-    // 3. Sync to Supabase in background if online
-    if (isSupabaseConfigured && isSupabaseReachable !== false) {
+    // 4. Sync to Supabase in background if online
+    if (shouldAttemptSupabase()) {
       try {
+        const dbPayload: any = {
+          id: created.id,
+          title: created.title,
+          description: created.description,
+          vertical: created.vertical,
+          city: created.location.city,
+          area: created.location.area,
+          address: created.location.address,
+          latitude: created.location.lat,
+          longitude: created.location.lng,
+          price_per_night: created.price_per_night,
+          currency: created.currency || '$',
+          max_guests: created.max_guests,
+          bedrooms: created.bedrooms,
+          beds: created.beds,
+          bathrooms: created.bathrooms,
+          amenities: created.amenities,
+          images: created.images,
+          badge: created.badge,
+          rating: created.rating,
+          review_count: created.review_count,
+          status: created.status
+        };
+
         const { error } = await withTimeout(
-          supabase.from('properties').insert({
-            id: created.id,
-            title: created.title,
-            description: created.description,
-            vertical: created.vertical,
-            city: created.location.city,
-            area: created.location.area,
-            address: created.location.address,
-            latitude: created.location.lat,
-            longitude: created.location.lng,
-            price_per_night: created.price_per_night,
-            currency: created.currency || '$',
-            max_guests: created.max_guests,
-            bedrooms: created.bedrooms,
-            beds: created.beds,
-            bathrooms: created.bathrooms,
-            amenities: created.amenities,
-            images: created.images,
-            badge: created.badge,
-            rating: created.rating,
-            review_count: created.review_count,
-            status: created.status,
-            operational_status: created.operational_status
-          }),
-          2000
+          supabase.from('properties').insert(dbPayload),
+          8000
         );
-        if (error) console.warn('Could not insert property to remote Supabase:', error);
+        if (error) {
+          markSupabaseFailure(error);
+          console.warn('Could not insert property to remote Supabase:', error);
+        } else {
+          markSupabaseSuccess();
+          console.log('✅ [Supabase] Property successfully saved to remote database:', created.title);
+        }
       } catch (err) {
-        console.warn('Note: Could not insert property to remote Supabase:', err);
+        markSupabaseFailure(err);
       }
     }
 
@@ -1178,13 +1210,16 @@ export const dataService = {
     // 1. Immediately persist in localStorage
     savePropertiesToStorage(localProperties);
 
-    // 2. Broadcast change across all browser tabs and windows
+    // 2. Broadcast change across all browser tabs and windows on THIS device
     broadcastDataChange('properties', 'update', localProperties[idx], id);
+
+    // 3. Immediately broadcast across ALL devices worldwide via WebSocket mesh
+    cloudSync.publishEvent('properties', 'update', localProperties[idx], id);
     cloudSync.publishSnapshot('properties', localProperties);
     cloudStorage.saveCloudProperties(localProperties);
 
-    // 3. Sync to Supabase in background if online and valid UUID
-    if (isSupabaseConfigured && isUuid(id) && isSupabaseReachable !== false) {
+    // 4. Sync to Supabase in background if online and valid UUID
+    if (shouldAttemptSupabase() && isUuid(id)) {
       try {
         const updatePayload: Record<string, any> = {};
         if (updates.title !== undefined) updatePayload.title = updates.title;
@@ -1205,11 +1240,15 @@ export const dataService = {
         if (updates.images !== undefined) updatePayload.images = updates.images;
         if (updates.badge !== undefined) updatePayload.badge = updates.badge;
         if (updates.status !== undefined) updatePayload.status = updates.status;
-        if (updates.operational_status !== undefined) updatePayload.operational_status = updates.operational_status;
 
-        await withTimeout(supabase.from('properties').update(updatePayload).eq('id', id), 2000);
+        const { error } = await withTimeout(supabase.from('properties').update(updatePayload).eq('id', id), 8000);
+        if (error) {
+          markSupabaseFailure(error);
+        } else {
+          markSupabaseSuccess();
+        }
       } catch (err) {
-        console.warn('Note: Could not update property in remote Supabase:', err);
+        markSupabaseFailure(err);
       }
     }
 
@@ -1233,20 +1272,24 @@ export const dataService = {
       localProperties[idx].operational_status = updates.operational_status;
     }
 
-    // Persist and broadcast
+    // Persist and broadcast locally and globally
     savePropertiesToStorage(localProperties);
     broadcastDataChange('properties', 'update', localProperties[idx], id);
+    cloudSync.publishEvent('properties', 'update', localProperties[idx], id);
     cloudSync.publishSnapshot('properties', localProperties);
     cloudStorage.saveCloudProperties(localProperties);
 
-    if (isSupabaseConfigured && isUuid(id) && isSupabaseReachable !== false) {
+    if (shouldAttemptSupabase() && isUuid(id)) {
       try {
         const payload: Record<string, any> = {};
         if (updates.status !== undefined) payload.status = updates.status;
-        if (updates.operational_status !== undefined) payload.operational_status = updates.operational_status;
-        await withTimeout(supabase.from('properties').update(payload).eq('id', id), 2000);
+        if (Object.keys(payload).length > 0) {
+          const { error } = await withTimeout(supabase.from('properties').update(payload).eq('id', id), 8000);
+          if (error) markSupabaseFailure(error);
+          else markSupabaseSuccess();
+        }
       } catch (err) {
-        console.warn('Note: Could not update property status in remote Supabase:', err);
+        markSupabaseFailure(err);
       }
     }
 
@@ -1259,17 +1302,20 @@ export const dataService = {
     const target = localProperties[idx];
     target.status = target.status === 'published' ? 'draft' : 'published';
 
-    // Persist and broadcast
+    // Persist and broadcast locally and globally
     savePropertiesToStorage(localProperties);
     broadcastDataChange('properties', 'update', target, id);
+    cloudSync.publishEvent('properties', 'update', target, id);
     cloudSync.publishSnapshot('properties', localProperties);
     cloudStorage.saveCloudProperties(localProperties);
 
-    if (isSupabaseConfigured && isUuid(id) && isSupabaseReachable !== false) {
+    if (shouldAttemptSupabase() && isUuid(id)) {
       try {
-        await withTimeout(supabase.from('properties').update({ status: target.status }).eq('id', id), 2000);
+        const { error } = await withTimeout(supabase.from('properties').update({ status: target.status }).eq('id', id), 8000);
+        if (error) markSupabaseFailure(error);
+        else markSupabaseSuccess();
       } catch (err) {
-        console.warn('Note: Could not toggle property status in remote Supabase:', err);
+        markSupabaseFailure(err);
       }
     }
 
@@ -1280,20 +1326,23 @@ export const dataService = {
     localProperties = localProperties.filter(p => p.id !== id);
     savePropertiesToStorage(localProperties);
     broadcastDataChange('properties', 'delete', null, id);
+    cloudSync.publishEvent('properties', 'delete', undefined, id);
     cloudSync.publishSnapshot('properties', localProperties);
     cloudStorage.saveCloudProperties(localProperties, true);
 
-    if (isSupabaseConfigured && isUuid(id) && isSupabaseReachable !== false) {
+    if (shouldAttemptSupabase() && isUuid(id)) {
       try {
-        await withTimeout(supabase.from('properties').delete().eq('id', id), 2000);
+        const { error } = await withTimeout(supabase.from('properties').delete().eq('id', id), 8000);
+        if (error) markSupabaseFailure(error);
+        else markSupabaseSuccess();
       } catch (err) {
-        console.warn('Note: Could not delete property in remote Supabase:', err);
+        markSupabaseFailure(err);
       }
     }
   },
 
   async logout(): Promise<void> {
-    if (isSupabaseConfigured && isSupabaseReachable !== false) {
+    if (shouldAttemptSupabase()) {
       try {
         await supabase.auth.signOut();
       } catch (err) {
@@ -1311,28 +1360,31 @@ export const dataService = {
     amenity?: string,
     includeDrafts: boolean = true
   ): Promise<Property[]> {
-    if (isSupabaseConfigured && isSupabaseReachable !== false) {
+    if (shouldAttemptSupabase()) {
       try {
-        let req = supabase.from('properties').select('*');
-        if (vertical && vertical !== 'all') {
-          req = req.eq('vertical', vertical);
-        }
-        if (query) {
-          req = req.or(`title.ilike.%${query}%,description.ilike.%${query}%,city.ilike.%${query}%,area.ilike.%${query}%`);
-        }
-        const { data, error } = await withTimeout(req, 1500);
-        if (!error && data && data.length > 0) {
-          isSupabaseReachable = true;
-          const remoteList = data.map(mapRowToProperty);
-          // Merge remote records with any local records so newly created/updated rooms are never lost
-          const remoteIds = new Set(remoteList.map(rp => rp.id));
-          const localOnly = localProperties.filter(lp => !remoteIds.has(lp.id));
-          localProperties = [...remoteList, ...localOnly];
-          savePropertiesToStorage(localProperties);
+        const { data, error } = await withTimeout(
+          supabase.from('properties').select('*').order('created_at', { ascending: false }),
+          8000
+        );
+        if (!error && data) {
+          markSupabaseSuccess();
+          const remoteList = data.map(mapRowToProperty).filter(p => !isDemoProperty(p));
+          if (remoteList.length > 0) {
+            const remoteMap = new Map(remoteList.map(rp => [rp.id, rp]));
+            const now = Date.now();
+            // Preserve only locally-created items from last 5 minutes that are still syncing
+            const pendingLocal = localProperties.filter(
+              lp => !remoteMap.has(lp.id) && !isDemoProperty(lp) && (now - ((lp as any)._localCreated || 0) < 300000)
+            );
+            localProperties = [...remoteList, ...pendingLocal];
+            savePropertiesToStorage(localProperties);
+            cloudSync.publishSnapshot('properties', localProperties);
+          }
+        } else if (error) {
+          markSupabaseFailure(error);
         }
       } catch (err) {
-        isSupabaseReachable = false;
-        console.warn('Supabase fetch timed out or offline, serving instant local storage cache:', err);
+        markSupabaseFailure(err);
       }
     }
 
@@ -2098,6 +2150,56 @@ registerCacheRefresher(() => {
   dataService.refreshLocalCache();
 });
 
+// Register real-time mutation handler for granular cross-device events
+registerMutationHandler((table, action, data, id) => {
+  if (table === 'properties') {
+    if (action === 'insert' && data && !isDemoProperty(data)) {
+      const exists = localProperties.some(p => p.id === data.id);
+      if (!exists) {
+        localProperties = [data, ...localProperties];
+        savePropertiesToStorage(localProperties);
+      }
+    } else if (action === 'update' && data) {
+      const targetId = id || data.id;
+      const idx = localProperties.findIndex(p => p.id === targetId);
+      if (idx !== -1) {
+        localProperties[idx] = { ...localProperties[idx], ...data };
+        savePropertiesToStorage(localProperties);
+      } else if (!isDemoProperty(data)) {
+        localProperties = [data, ...localProperties];
+        savePropertiesToStorage(localProperties);
+      }
+    } else if (action === 'delete') {
+      const targetId = id || data?.id;
+      if (targetId) {
+        localProperties = localProperties.filter(p => p.id !== targetId);
+        savePropertiesToStorage(localProperties);
+      }
+    }
+  } else if (table === 'bookings') {
+    if (action === 'insert' && data) {
+      const exists = localBookings.some(b => b.id === data.id);
+      if (!exists) {
+        localBookings = [data, ...localBookings];
+        saveBookingsToStorage(localBookings);
+      }
+    } else if (action === 'update' && data) {
+      const targetId = id || data.id;
+      const idx = localBookings.findIndex(b => b.id === targetId);
+      if (idx !== -1) {
+        localBookings[idx] = { ...localBookings[idx], ...data };
+        saveBookingsToStorage(localBookings);
+      }
+    } else if (action === 'delete') {
+      const targetId = id || data?.id;
+      if (targetId) {
+        localBookings = localBookings.filter(b => b.id !== targetId);
+        saveBookingsToStorage(localBookings);
+      }
+    }
+  }
+});
+
 // Register cloud snapshot handler so remote devices receive listings upon connecting
 // Safety Rule: Empty snapshots or demo properties NEVER contaminate local properties
 registerSnapshotHandler((table, items) => {
@@ -2105,32 +2207,42 @@ registerSnapshotHandler((table, items) => {
     const validItems = items.filter(p => !isDemoProperty(p));
     if (validItems.length > 0) {
       const localMap = new Map(localProperties.map(p => [p.id, p]));
-      let hasNew = false;
+      let hasChanges = false;
       for (const item of validItems) {
         if (!localMap.has(item.id)) {
           localMap.set(item.id, item);
-          hasNew = true;
+          hasChanges = true;
+        } else {
+          const existing = localMap.get(item.id)!;
+          if (JSON.stringify(existing) !== JSON.stringify(item)) {
+            localMap.set(item.id, { ...existing, ...item });
+            hasChanges = true;
+          }
         }
       }
-      if (hasNew || localProperties.length === 0) {
+      if (hasChanges || localProperties.length === 0) {
         localProperties = Array.from(localMap.values()).filter(p => !isDemoProperty(p));
         savePropertiesToStorage(localProperties);
-        broadcastDataChange('properties', 'sync');
       }
     }
   } else if (table === 'bookings' && Array.isArray(items) && items.length > 0) {
     const localMap = new Map(localBookings.map(b => [b.id, b]));
-    let hasNew = false;
+    let hasChanges = false;
     for (const item of items) {
       if (!localMap.has(item.id)) {
         localMap.set(item.id, item);
-        hasNew = true;
+        hasChanges = true;
+      } else {
+        const existing = localMap.get(item.id)!;
+        if (JSON.stringify(existing) !== JSON.stringify(item)) {
+          localMap.set(item.id, { ...existing, ...item });
+          hasChanges = true;
+        }
       }
     }
-    if (hasNew || localBookings.length === 0) {
+    if (hasChanges || localBookings.length === 0) {
       localBookings = Array.from(localMap.values());
       saveBookingsToStorage(localBookings);
-      broadcastDataChange('bookings', 'sync');
     }
   }
 });
@@ -2140,11 +2252,9 @@ registerSyncRequestHandler(() => {
   const customOnly = localProperties.filter(p => !isDemoProperty(p));
   if (customOnly.length > 0) {
     cloudSync.publishSnapshot('properties', customOnly);
-    cloudStorage.saveCloudProperties(customOnly);
   }
   if (localBookings.length > 0) {
     cloudSync.publishSnapshot('bookings', localBookings);
-    cloudStorage.saveCloudBookings(localBookings);
   }
 });
 

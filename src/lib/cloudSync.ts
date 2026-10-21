@@ -12,14 +12,13 @@ export interface CloudSyncPayload {
 }
 
 const BROKERS = [
-  'wss://broker.emqx.io:8084/mqtt',
   'wss://broker.hivemq.com:8884/mqtt',
-  'wss://test.mosquitto.org:8081'
+  'wss://broker.emqx.io:8084/mqtt'
 ];
 
-const TOPIC_EVENTS = 'reetay/sync/v6/events';
-const TOPIC_SNAPSHOT_PROPERTIES = 'reetay/sync/v6/properties';
-const TOPIC_SNAPSHOT_BOOKINGS = 'reetay/sync/v6/bookings';
+const TOPIC_EVENTS = 'reetay/sync/v7/events';
+const TOPIC_SNAPSHOT_PROPERTIES = 'reetay/sync/v7/properties';
+const TOPIC_SNAPSHOT_BOOKINGS = 'reetay/sync/v7/bookings';
 
 const CLIENT_ID = 'client_' + Math.random().toString(36).substring(2, 10);
 
@@ -38,6 +37,7 @@ let isConnected = false;
 let currentBrokerIndex = 0;
 let pingInterval: any = null;
 let reconnectTimeout: any = null;
+let packetIdCounter = 1;
 let onEventCallback: EventCallback | null = null;
 let onSnapshotCallback: SnapshotCallback | null = null;
 let onSyncRequestCallback: SyncRequestCallback | null = null;
@@ -90,7 +90,8 @@ function sendConnect(ws: WebSocket) {
 }
 
 function sendSubscribe(ws: WebSocket, topic: string) {
-  const packetId = new Uint8Array([0x00, 0x01]);
+  packetIdCounter = (packetIdCounter + 1) % 65535 || 1;
+  const packetId = new Uint8Array([(packetIdCounter >> 8) & 0xff, packetIdCounter & 0xff]);
   const topicBuf = encodeString(topic);
   const qos = new Uint8Array([0x00]);
   const payload = concatUint8Arrays([packetId, topicBuf, qos]);
@@ -126,7 +127,6 @@ function flushOutbox() {
 /**
  * Robust packet framing parser:
  * Decodes all MQTT packets inside a single WebSocket frame.
- * Handles QoS 0, QoS 1, QoS 2, and exact payload boundaries.
  */
 function handleIncomingPackets(buf: Uint8Array) {
   let pos = 0;
@@ -147,7 +147,6 @@ function handleIncomingPackets(buf: Uint8Array) {
 
     const packetEnd = pos + remainingLength;
     if (packetEnd > buf.length) {
-      // Incomplete packet in frame
       break;
     }
 
@@ -163,7 +162,6 @@ function handleIncomingPackets(buf: Uint8Array) {
         const topic = new TextDecoder().decode(packetBuf.subarray(2, 2 + topicLen));
         let payloadOffset = 2 + topicLen;
 
-        // Skip Packet Identifier if QoS > 0
         if (qos > 0) {
           payloadOffset += 2;
         }
@@ -171,7 +169,7 @@ function handleIncomingPackets(buf: Uint8Array) {
         const payloadStr = new TextDecoder().decode(packetBuf.subarray(payloadOffset));
         if (!payloadStr) continue;
 
-        if (topic === TOPIC_EVENTS || topic === 'reetay/sync/v5/events') {
+        if (topic === TOPIC_EVENTS) {
           const payload: CloudSyncPayload = JSON.parse(payloadStr);
           if (payload.senderId !== CLIENT_ID) {
             if (payload.action === 'sync_request' && onSyncRequestCallback) {
@@ -180,12 +178,12 @@ function handleIncomingPackets(buf: Uint8Array) {
               onEventCallback(payload);
             }
           }
-        } else if (topic === TOPIC_SNAPSHOT_PROPERTIES || topic === 'reetay/sync/v5/properties') {
+        } else if (topic === TOPIC_SNAPSHOT_PROPERTIES) {
           const items = JSON.parse(payloadStr);
           if (Array.isArray(items) && onSnapshotCallback) {
             onSnapshotCallback('properties', items);
           }
-        } else if (topic === TOPIC_SNAPSHOT_BOOKINGS || topic === 'reetay/sync/v5/bookings') {
+        } else if (topic === TOPIC_SNAPSHOT_BOOKINGS) {
           const items = JSON.parse(payloadStr);
           if (Array.isArray(items) && onSnapshotCallback) {
             onSnapshotCallback('bookings', items);
@@ -242,22 +240,18 @@ export const cloudSync = {
           isConnected = true;
           console.log(`🌐 [CloudSync] Connected to global sync cloud (${brokerUrl})`);
 
-          // Subscribe to live events and retained snapshots (v6 active and v5 legacy bridge)
+          // Subscribe to live events and snapshots
           sendSubscribe(ws, TOPIC_EVENTS);
           sendSubscribe(ws, TOPIC_SNAPSHOT_PROPERTIES);
           sendSubscribe(ws, TOPIC_SNAPSHOT_BOOKINGS);
-          sendSubscribe(ws, 'reetay/sync/v5/events');
-          sendSubscribe(ws, 'reetay/sync/v5/properties');
-          sendSubscribe(ws, 'reetay/sync/v5/bookings');
-
-          // Immediately clear the stale demo snapshot retained on the v5 topic
-          rawSendPublish(ws, 'reetay/sync/v5/properties', '[]', true);
 
           // Flush queued messages that were pending while offline/connecting
           flushOutbox();
 
           // Broadcast sync_request so any peer online announces their current state
-          this.publishEvent('all', 'sync_request');
+          setTimeout(() => {
+            this.publishEvent('all', 'sync_request');
+          }, 400);
 
           // Keep alive ping every 25 seconds
           if (pingInterval) clearInterval(pingInterval);
@@ -308,13 +302,15 @@ export const cloudSync = {
     }
   },
 
-  publishSnapshot(table: 'properties' | 'bookings', items: any[]) {
-    // Safety: do not queue an empty snapshot that could overwrite valid listings
+  publishSnapshot(table: 'properties' | 'bookings', items: any[], allowEmpty = false) {
+    if (items.length === 0 && !allowEmpty) {
+      return;
+    }
     const topic = table === 'properties' ? TOPIC_SNAPSHOT_PROPERTIES : TOPIC_SNAPSHOT_BOOKINGS;
     const message = JSON.stringify(items);
 
     if (activeWs && activeWs.readyState === WebSocket.OPEN) {
-      rawSendPublish(activeWs, topic, message, true); // retain = true
+      rawSendPublish(activeWs, topic, message, true);
     } else {
       outboxQueue.push({ topic, message, retain: true });
     }
