@@ -178,10 +178,19 @@ export const isDemoProperty = (p: any): boolean => {
   if (!p) return false;
   if (p.is_demo === true) return true;
   if (p.id && DEMO_PROPERTY_IDS.has(p.id)) return true;
+  const title = (p.title || '').toLowerCase();
+  const desc = (p.description || '').toLowerCase();
+  if (
+    title.includes('executive suite 101') ||
+    title.includes('reetay executive suite') ||
+    (desc.includes('plunge pool') && desc.includes('fiber wifi'))
+  ) {
+    return true;
+  }
   return false;
 };
 
-// Purge legacy demo data caches from localStorage on load
+// Purge legacy demo data caches and unwanted listings from localStorage on load
 if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
   try {
     ['reetay_properties_v1', 'reetay_properties_v2', 'reetay_properties_v3', 'reetay_properties_v4', 'reetay_bookings_v1', 'reetay_bookings_v2', 'reetay_bookings_v3', 'reetay_bookings_v4'].forEach(k => localStorage.removeItem(k));
@@ -1076,8 +1085,16 @@ export const dataService = {
       vehicle_type: newProp.vehicle_type,
       pickup_locations: newProp.pickup_locations,
       dropoff_locations: newProp.dropoff_locations,
-      amenities: newProp.amenities || ['Air-condition', 'Bluetooth audio connectivity'],
-      images: newProp.images?.length ? newProp.images : ['https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&w=1000&q=80'],
+      amenities: newProp.amenities || (newProp.vertical === 'cars' ? ['Air-condition', 'Bluetooth audio connectivity'] : ['Air Conditioning', 'High-Speed WiFi']),
+      images: newProp.images?.length
+        ? newProp.images
+        : [
+            newProp.vertical === 'cars'
+              ? 'https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&w=1000&q=80'
+              : newProp.vertical === 'experiences'
+              ? 'https://images.unsplash.com/photo-1544551763-46a013bb70d5?auto=format&fit=crop&w=1000&q=80'
+              : 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=1000&q=80'
+          ],
       badge: newProp.badge || '',
       status: newProp.status || 'published',
       operational_status: newProp.operational_status || 'available',

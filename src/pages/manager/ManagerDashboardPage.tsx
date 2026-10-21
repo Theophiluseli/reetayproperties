@@ -179,14 +179,26 @@ export const ManagerDashboardPage: React.FC<ManagerDashboardPageProps> = ({ mana
         ? 'https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&w=1000&q=80'
         : selectedVertical === 'experiences'
         ? 'https://images.unsplash.com/photo-1544551763-46a013bb70d5?auto=format&fit=crop&w=1000&q=80'
-        : 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1000&q=80'
+        : 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=1000&q=80'
     );
-    setGalleryImages([
-      'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=800&q=80',
-      'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?auto=format&fit=crop&w=800&q=80',
-      'https://images.unsplash.com/photo-1542282088-72c9c27ed0cd?auto=format&fit=crop&w=800&q=80',
-      'https://images.unsplash.com/photo-1580273916550-e323be2ae537?auto=format&fit=crop&w=800&q=80'
-    ]);
+    setGalleryImages(
+      selectedVertical === 'cars'
+        ? [
+            'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=800&q=80',
+            'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?auto=format&fit=crop&w=800&q=80',
+            'https://images.unsplash.com/photo-1542282088-72c9c27ed0cd?auto=format&fit=crop&w=800&q=80'
+          ]
+        : selectedVertical === 'experiences'
+        ? [
+            'https://images.unsplash.com/photo-1544551763-46a013bb70d5?auto=format&fit=crop&w=800&q=80',
+            'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80'
+          ]
+        : [
+            'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=800&q=80',
+            'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?auto=format&fit=crop&w=800&q=80',
+            'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?auto=format&fit=crop&w=800&q=80'
+          ]
+    );
     setNewGalleryUrlInput('');
     setPropDescription(
       selectedVertical === 'cars'
@@ -217,6 +229,51 @@ export const ManagerDashboardPage: React.FC<ManagerDashboardPageProps> = ({ mana
     setShowPropertyModal(true);
   };
 
+  const handleSelectModalVertical = (v: VerticalType) => {
+    setPropVertical(v);
+    if (!editingProperty) {
+      if (v === 'cars') {
+        setCoverImage('https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&w=1000&q=80');
+        setGalleryImages([
+          'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=800&q=80',
+          'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?auto=format&fit=crop&w=800&q=80',
+          'https://images.unsplash.com/photo-1542282088-72c9c27ed0cd?auto=format&fit=crop&w=800&q=80'
+        ]);
+        setPropPrice(95);
+        setPropUnitLabel('Starting from');
+        setPropMaxGuests(5);
+        setPropBedrooms(0);
+        setPropBeds(0);
+        setPropBathrooms(0);
+      } else if (v === 'experiences') {
+        setCoverImage('https://images.unsplash.com/photo-1544551763-46a013bb70d5?auto=format&fit=crop&w=1000&q=80');
+        setGalleryImages([
+          'https://images.unsplash.com/photo-1544551763-46a013bb70d5?auto=format&fit=crop&w=800&q=80',
+          'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80'
+        ]);
+        setPropPrice(150);
+        setPropUnitLabel('per person');
+        setPropMaxGuests(10);
+        setPropBedrooms(0);
+        setPropBeds(0);
+        setPropBathrooms(0);
+      } else {
+        setCoverImage('https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=1000&q=80');
+        setGalleryImages([
+          'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=800&q=80',
+          'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?auto=format&fit=crop&w=800&q=80',
+          'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?auto=format&fit=crop&w=800&q=80'
+        ]);
+        setPropPrice(250);
+        setPropUnitLabel('per night');
+        setPropMaxGuests(4);
+        setPropBedrooms(2);
+        setPropBeds(2);
+        setPropBathrooms(2);
+      }
+    }
+  };
+
   const handleOpenEditModal = (prop: Property) => {
     setEditingProperty(prop);
     setPropTitle(prop.title);
@@ -225,7 +282,14 @@ export const ManagerDashboardPage: React.FC<ManagerDashboardPageProps> = ({ mana
     setPropUnitLabel(prop.price_unit_label || (prop.vertical === 'cars' ? 'Starting from' : 'per night'));
     setPropArea(prop.location.area);
     setPropCity(prop.location.city);
-    setCoverImage(prop.images[0] || 'https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&w=1000&q=80');
+    setCoverImage(
+      prop.images[0] ||
+      (prop.vertical === 'cars'
+        ? 'https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&w=1000&q=80'
+        : prop.vertical === 'experiences'
+        ? 'https://images.unsplash.com/photo-1544551763-46a013bb70d5?auto=format&fit=crop&w=1000&q=80'
+        : 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=1000&q=80')
+    );
     setGalleryImages(prop.images.slice(1) || []);
     setNewGalleryUrlInput('');
     setPropDescription(prop.description);
@@ -248,8 +312,14 @@ export const ManagerDashboardPage: React.FC<ManagerDashboardPageProps> = ({ mana
   const handleSaveProperty = async (e: React.FormEvent) => {
     e.preventDefault();
     const allImages = [coverImage, ...galleryImages].filter(Boolean);
+    const fallbackImage =
+      propVertical === 'cars'
+        ? 'https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&w=1000&q=80'
+        : propVertical === 'experiences'
+        ? 'https://images.unsplash.com/photo-1544551763-46a013bb70d5?auto=format&fit=crop&w=1000&q=80'
+        : 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=1000&q=80';
     const payload: Partial<Property> = {
-      title: propTitle || 'Luxury Listing',
+      title: propTitle || (propVertical === 'cars' ? 'Executive Fleet Vehicle' : 'Luxury Residence'),
       description: propDescription || 'High-end luxury offering.',
       vertical: propVertical,
       price_per_night: Number(propPrice),
@@ -274,7 +344,7 @@ export const ManagerDashboardPage: React.FC<ManagerDashboardPageProps> = ({ mana
       dropoff_locations: propVertical === 'cars' ? propDropoffLocations.split(',').map(s => s.trim()).filter(Boolean) : undefined,
       amenities: selectedAmenities,
       badge: propBadge,
-      images: allImages.length > 0 ? allImages : ['https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&w=1000&q=80']
+      images: allImages.length > 0 ? allImages : [fallbackImage]
     };
 
     if (editingProperty) {
@@ -689,7 +759,7 @@ export const ManagerDashboardPage: React.FC<ManagerDashboardPageProps> = ({ mana
                 <div className="grid grid-cols-3 gap-2">
                   <button
                     type="button"
-                    onClick={() => setPropVertical('stays')}
+                    onClick={() => handleSelectModalVertical('stays')}
                     className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 ${propVertical === 'stays' ? 'bg-[#2E0854] text-white border-[#2E0854]' : 'bg-gray-50 border-gray-200 text-gray-700'}`}
                   >
                     <Bed className="w-4 h-4" />
@@ -697,7 +767,7 @@ export const ManagerDashboardPage: React.FC<ManagerDashboardPageProps> = ({ mana
                   </button>
                   <button
                     type="button"
-                    onClick={() => setPropVertical('cars')}
+                    onClick={() => handleSelectModalVertical('cars')}
                     className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 ${propVertical === 'cars' ? 'bg-[#2E0854] text-white border-[#2E0854]' : 'bg-gray-50 border-gray-200 text-gray-700'}`}
                   >
                     <Car className="w-4 h-4" />
@@ -705,7 +775,7 @@ export const ManagerDashboardPage: React.FC<ManagerDashboardPageProps> = ({ mana
                   </button>
                   <button
                     type="button"
-                    onClick={() => setPropVertical('experiences')}
+                    onClick={() => handleSelectModalVertical('experiences')}
                     className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 ${propVertical === 'experiences' ? 'bg-[#2E0854] text-white border-[#2E0854]' : 'bg-gray-50 border-gray-200 text-gray-700'}`}
                   >
                     <Sparkles className="w-4 h-4" />
