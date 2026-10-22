@@ -60,6 +60,7 @@ export const ManagerDashboardPage: React.FC<ManagerDashboardPageProps> = ({ mana
   const [showPropertyModal, setShowPropertyModal] = useState(false);
   const [showWalkInModal, setShowWalkInModal] = useState(false);
   const [editingProperty, setEditingProperty] = useState<Property | null>(null);
+  const [isSavingProperty, setIsSavingProperty] = useState(false);
 
   // Form State for Adding / Editing Property
   const [propTitle, setPropTitle] = useState('');
@@ -113,16 +114,17 @@ export const ManagerDashboardPage: React.FC<ManagerDashboardPageProps> = ({ mana
   }, []);
 
   const loadData = async () => {
-    const stays = await dataService.getProperties('stays');
-    const cars = await dataService.getProperties('cars');
-    const exps = await dataService.getProperties('experiences');
-    const allProps = [...stays, ...cars, ...exps];
-    const b = await dataService.getBookings();
+    try {
+      const allProps = await dataService.getProperties('all', undefined, undefined, true);
+      const b = await dataService.getBookings();
 
-    setProperties(allProps);
-    setBookings(b);
-    if (allProps.length > 0 && !selectedPropertyId) {
-      setSelectedPropertyId(allProps[0].id);
+      setProperties(allProps);
+      setBookings(b);
+      if (allProps.length > 0 && !selectedPropertyId) {
+        setSelectedPropertyId(allProps[0].id);
+      }
+    } catch (err) {
+      console.error('Failed to load manager data:', err);
     }
   };
 
@@ -311,52 +313,60 @@ export const ManagerDashboardPage: React.FC<ManagerDashboardPageProps> = ({ mana
 
   const handleSaveProperty = async (e: React.FormEvent) => {
     e.preventDefault();
-    const allImages = [coverImage, ...galleryImages].filter(Boolean);
-    const fallbackImage =
-      propVertical === 'cars'
-        ? 'https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&w=1000&q=80'
-        : propVertical === 'experiences'
-        ? 'https://images.unsplash.com/photo-1544551763-46a013bb70d5?auto=format&fit=crop&w=1000&q=80'
-        : 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=1000&q=80';
-    const payload: Partial<Property> = {
-      title: propTitle || (propVertical === 'cars' ? 'Executive Fleet Vehicle' : 'Luxury Residence'),
-      description: propDescription || 'High-end luxury offering.',
-      vertical: propVertical,
-      price_per_night: Number(propPrice),
-      price_unit_label: propUnitLabel,
-      status: propStatus,
-      operational_status: propOperationalStatus,
-      location: {
-        city: propCity,
-        area: propArea,
-        address: `${propArea}, ${propCity}`,
-        lat: 5.6037,
-        lng: -0.1870
-      },
-      max_guests: Number(propMaxGuests),
-      bedrooms: propVertical === 'stays' ? Number(propBedrooms) : 0,
-      beds: propVertical === 'stays' ? Number(propBeds) : 0,
-      bathrooms: propVertical === 'stays' ? Number(propBathrooms) : 0,
-      fuel_type: propVertical === 'cars' ? propFuelType : undefined,
-      transmission: propVertical === 'cars' ? propTransmission : undefined,
-      vehicle_type: propVertical === 'cars' ? propVehicleType : undefined,
-      pickup_locations: propVertical === 'cars' ? propPickupLocations.split(',').map(s => s.trim()).filter(Boolean) : undefined,
-      dropoff_locations: propVertical === 'cars' ? propDropoffLocations.split(',').map(s => s.trim()).filter(Boolean) : undefined,
-      amenities: selectedAmenities,
-      badge: propBadge,
-      images: allImages.length > 0 ? allImages : [fallbackImage]
-    };
+    if (isSavingProperty) return;
+    setIsSavingProperty(true);
+    try {
+      const allImages = [coverImage, ...galleryImages].filter(Boolean);
+      const fallbackImage =
+        propVertical === 'cars'
+          ? 'https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&w=1000&q=80'
+          : propVertical === 'experiences'
+          ? 'https://images.unsplash.com/photo-1544551763-46a013bb70d5?auto=format&fit=crop&w=1000&q=80'
+          : 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=1000&q=80';
+      const payload: Partial<Property> = {
+        title: propTitle || (propVertical === 'cars' ? 'Executive Fleet Vehicle' : 'Luxury Residence'),
+        description: propDescription || 'High-end luxury offering.',
+        vertical: propVertical,
+        price_per_night: Number(propPrice),
+        price_unit_label: propUnitLabel,
+        status: propStatus,
+        operational_status: propOperationalStatus,
+        location: {
+          city: propCity,
+          area: propArea,
+          address: `${propArea}, ${propCity}`,
+          lat: 5.6037,
+          lng: -0.1870
+        },
+        max_guests: Number(propMaxGuests),
+        bedrooms: propVertical === 'stays' ? Number(propBedrooms) : 0,
+        beds: propVertical === 'stays' ? Number(propBeds) : 0,
+        bathrooms: propVertical === 'stays' ? Number(propBathrooms) : 0,
+        fuel_type: propVertical === 'cars' ? propFuelType : undefined,
+        transmission: propVertical === 'cars' ? propTransmission : undefined,
+        vehicle_type: propVertical === 'cars' ? propVehicleType : undefined,
+        pickup_locations: propVertical === 'cars' ? propPickupLocations.split(',').map(s => s.trim()).filter(Boolean) : undefined,
+        dropoff_locations: propVertical === 'cars' ? propDropoffLocations.split(',').map(s => s.trim()).filter(Boolean) : undefined,
+        amenities: selectedAmenities,
+        badge: propBadge,
+        images: allImages.length > 0 ? allImages : [fallbackImage]
+      };
 
-    if (editingProperty) {
-      await dataService.updateProperty(editingProperty.id, payload);
-      alert('Listing updated successfully!');
-    } else {
-      await dataService.createProperty(payload);
-      alert('New listing published successfully to front-end!');
+      if (editingProperty) {
+        await dataService.updateProperty(editingProperty.id, payload);
+        alert('Listing updated successfully!');
+      } else {
+        await dataService.createProperty(payload);
+        alert('New listing published successfully to front-end!');
+      }
+
+      setShowPropertyModal(false);
+      loadData();
+    } catch (err: any) {
+      alert(err.message || 'Failed to save listing');
+    } finally {
+      setIsSavingProperty(false);
     }
-
-    setShowPropertyModal(false);
-    loadData();
   };
 
   const handleDeleteProperty = async (id: string) => {
@@ -1198,10 +1208,19 @@ export const ManagerDashboardPage: React.FC<ManagerDashboardPageProps> = ({ mana
 
               <button
                 type="submit"
-                className="w-full py-3.5 bg-[#2E0854] text-white font-black text-xs rounded-xl shadow-md hover:bg-purple-900 transition-all flex items-center justify-center gap-2"
+                disabled={isSavingProperty}
+                className="w-full py-3.5 bg-[#2E0854] text-white font-black text-xs rounded-xl shadow-md hover:bg-purple-900 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <Check className="w-4 h-4 text-gold-400" />
-                <span>{editingProperty ? 'Update Listing Details' : 'Publish Listing to Front-End'}</span>
+                {isSavingProperty ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Check className="w-4 h-4 text-gold-400" />
+                )}
+                <span>
+                  {isSavingProperty
+                    ? (editingProperty ? 'Updating Listing Details...' : 'Publishing Listing to Front-End...')
+                    : (editingProperty ? 'Update Listing Details' : 'Publish Listing to Front-End')}
+                </span>
               </button>
             </form>
           </div>

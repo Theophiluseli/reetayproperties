@@ -168,22 +168,16 @@ const REVIEWS_STORAGE_KEY = 'reetay_reviews_v6';
 const FAVORITES_STORAGE_KEY = 'reetay_favorites_v6';
 const SESSION_STORAGE_KEY = 'reetay_active_session_v1';
 
-export const DEMO_PROPERTY_IDS = new Set([
-  'prop-1', 'prop-2', 'prop-3', 'prop-4', 'prop-5',
-  'car-1', 'car-2', 'car-3', 'car-4', 'car-5', 'car-6', 'car-7', 'car-8', 'car-9', 'car-10',
-  'exp-1'
-]);
+export const DEMO_PROPERTY_IDS = new Set<string>();
 
 export const isDemoProperty = (p: any): boolean => {
   if (!p) return false;
   if (p.is_demo === true) return true;
-  if (p.id && DEMO_PROPERTY_IDS.has(p.id)) return true;
   const title = (p.title || '').toLowerCase();
   const desc = (p.description || '').toLowerCase();
   if (
     title.includes('executive suite 101') ||
-    title.includes('reetay executive suite') ||
-    (desc.includes('plunge pool') && desc.includes('fiber wifi'))
+    title.includes('reetay executive suite 101')
   ) {
     return true;
   }
@@ -238,31 +232,62 @@ const INITIAL_INCIDENTS: IncidentReport[] = [
 ];
 
 export const loadPropertiesFromStorage = (): Property[] => {
+  const baseMock = MOCK_PROPERTIES.filter(p => !isDemoProperty(p));
   try {
     const saved = localStorage.getItem(PROPERTIES_STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed)) {
+      if (Array.isArray(parsed) && parsed.length > 0) {
         const cleaned = parsed.filter((p: any) => !isDemoProperty(p));
-        if (cleaned.length > 0) return cleaned;
+        if (cleaned.length > 0) {
+          const itemMap = new Map<string, Property>();
+          for (const p of baseMock) {
+            itemMap.set(p.id, p);
+          }
+          const customNew: Property[] = [];
+          for (const p of cleaned) {
+            if (itemMap.has(p.id)) {
+              itemMap.set(p.id, p);
+            } else {
+              customNew.push(p);
+            }
+          }
+          const merged = [...customNew, ...Array.from(itemMap.values())];
+          return merged;
+        }
       }
     }
     // Fallback: check v5 storage to automatically recover any listing created by another admin
     const savedV5 = localStorage.getItem('reetay_properties_v5');
     if (savedV5) {
       const parsedV5 = JSON.parse(savedV5);
-      if (Array.isArray(parsedV5)) {
+      if (Array.isArray(parsedV5) && parsedV5.length > 0) {
         const customOnly = parsedV5.filter((p: any) => !isDemoProperty(p));
         if (customOnly.length > 0) {
-          localStorage.setItem(PROPERTIES_STORAGE_KEY, JSON.stringify(customOnly));
-          return customOnly;
+          const itemMap = new Map<string, Property>();
+          for (const p of baseMock) {
+            itemMap.set(p.id, p);
+          }
+          const customNew: Property[] = [];
+          for (const p of customOnly) {
+            if (itemMap.has(p.id)) {
+              itemMap.set(p.id, p);
+            } else {
+              customNew.push(p);
+            }
+          }
+          const merged = [...customNew, ...Array.from(itemMap.values())];
+          savePropertiesToStorage(merged);
+          return merged;
         }
       }
     }
   } catch (e) {
     console.error('Failed to load properties from localStorage:', e);
   }
-  return [];
+  // Initialize with baseline luxury inventory so the platform is never empty
+  savePropertiesToStorage(baseMock);
+  return baseMock;
 };
 
 export const savePropertiesToStorage = (props: Property[]) => {
@@ -550,12 +575,13 @@ export const getPropertyLiveStatus = (property: Property, bookingsList?: Booking
 // Supabase reachability state with smart recovery and automatic backoff
 export let isSupabaseReachable: boolean | null = null;
 let lastSupabaseFailureTime = 0;
-const SUPABASE_RETRY_INTERVAL_MS = 15000; // Auto-retry after 15 seconds
+const SUPABASE_RETRY_INTERVAL_MS = 60000; // Auto-retry after 60 seconds
 
 export const shouldAttemptSupabase = (): boolean => {
   if (!isSupabaseConfigured) return false;
-  if (isSupabaseReachable === true || isSupabaseReachable === null) return true;
-  // If previously failed, allow retry if 15 seconds have passed
+  if (isSupabaseReachable === true) return true;
+  if (isSupabaseReachable === null) return true;
+  // If previously failed, allow retry if 60 seconds have passed
   return Date.now() - lastSupabaseFailureTime > SUPABASE_RETRY_INTERVAL_MS;
 };
 
@@ -567,7 +593,7 @@ export const markSupabaseFailure = (err?: any) => {
   isSupabaseReachable = false;
   lastSupabaseFailureTime = Date.now();
   if (err) {
-    console.warn('⚠️ [Supabase] Database unreachable or timed out, serving high-speed local/cloud cache (will retry in 15s):', err?.message || err);
+    console.warn('⚠️ [Supabase] Database unreachable or timed out, serving high-speed local/cloud cache (will retry in 60s):', err?.message || err);
   }
 };
 
@@ -575,7 +601,7 @@ export const setSupabaseReachableStatus = (status: boolean) => {
   isSupabaseReachable = status;
 };
 
-const withTimeout = <T>(promise: PromiseLike<T>, timeoutMs = 8000): Promise<T> => {
+const withTimeout = <T>(promise: PromiseLike<T>, timeoutMs = 1500): Promise<T> => {
   return Promise.race([
     Promise.resolve(promise),
     new Promise<T>((_, reject) =>
@@ -1141,55 +1167,82 @@ export const dataService = {
     cloudSync.publishSnapshot('properties', localProperties);
     cloudStorage.saveCloudProperties(localProperties);
 
-    // 4. Sync to Supabase in background if online
+    // 4. Sync to Supabase in background (NON-BLOCKING so UI returns in 0ms)
     if (shouldAttemptSupabase()) {
-      try {
-        const dbPayload: any = {
-          id: created.id,
-          title: created.title,
-          description: created.description,
-          vertical: created.vertical,
-          city: created.location.city,
-          area: created.location.area,
-          address: created.location.address,
-          latitude: created.location.lat,
-          longitude: created.location.lng,
-          price_per_night: created.price_per_night,
-          currency: created.currency || '$',
-          max_guests: created.max_guests,
-          bedrooms: created.bedrooms,
-          beds: created.beds,
-          bathrooms: created.bathrooms,
-          amenities: created.amenities,
-          images: created.images,
-          badge: created.badge,
-          rating: created.rating,
-          review_count: created.review_count,
-          status: created.status
-        };
+      const dbPayload: any = {
+        id: created.id,
+        title: created.title,
+        description: created.description,
+        vertical: created.vertical,
+        city: created.location.city,
+        area: created.location.area,
+        address: created.location.address,
+        latitude: created.location.lat,
+        longitude: created.location.lng,
+        price_per_night: created.price_per_night,
+        currency: created.currency || '$',
+        max_guests: created.max_guests,
+        bedrooms: created.bedrooms,
+        beds: created.beds,
+        bathrooms: created.bathrooms,
+        amenities: created.amenities,
+        images: created.images,
+        badge: created.badge,
+        rating: created.rating,
+        review_count: created.review_count,
+        status: created.status
+      };
 
-        const { error } = await withTimeout(
-          supabase.from('properties').insert(dbPayload),
-          8000
-        );
-        if (error) {
-          markSupabaseFailure(error);
-          console.warn('Could not insert property to remote Supabase:', error);
-        } else {
-          markSupabaseSuccess();
-          console.log('✅ [Supabase] Property successfully saved to remote database:', created.title);
-        }
-      } catch (err) {
-        markSupabaseFailure(err);
-      }
+      withTimeout(supabase.from('properties').insert(dbPayload), 1500)
+        .then(({ error }) => {
+          if (error) {
+            markSupabaseFailure(error);
+            console.warn('Could not insert property to remote Supabase:', error);
+          } else {
+            markSupabaseSuccess();
+            console.log('✅ [Supabase] Property successfully saved to remote database:', created.title);
+          }
+        })
+        .catch(err => {
+          markSupabaseFailure(err);
+        });
     }
 
     return created;
   },
 
   async updateProperty(id: string, updates: Partial<Property>): Promise<Property | null> {
-    const idx = localProperties.findIndex(p => p.id === id);
-    if (idx === -1) return null;
+    let idx = localProperties.findIndex(p => p.id === id);
+    if (idx === -1) {
+      // Self-recovery if property is missing in memory
+      const fromStorage = loadPropertiesFromStorage().find(p => p.id === id);
+      if (fromStorage) {
+        localProperties.unshift(fromStorage);
+        idx = 0;
+      } else {
+        const fallback: Property = {
+          id,
+          title: updates.title || 'Luxury Listing',
+          description: updates.description || '',
+          vertical: updates.vertical || 'stays',
+          location: updates.location || { city: 'Accra', area: 'Airport Residential', address: 'Accra, Ghana', lat: 5.6037, lng: -0.1870 },
+          price_per_night: Number(updates.price_per_night) || 250,
+          currency: updates.currency || '$',
+          max_guests: Number(updates.max_guests) || 2,
+          bedrooms: Number(updates.bedrooms) || 0,
+          beds: Number(updates.beds) || 0,
+          bathrooms: Number(updates.bathrooms) || 0,
+          amenities: updates.amenities || ['WiFi'],
+          images: updates.images || ['https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1200&q=80'],
+          status: updates.status || 'published',
+          rating: 5.0,
+          review_count: 0,
+          host: { name: 'Reetay Luxury Hospitality', avatar: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=200&q=80', superhost: true }
+        };
+        localProperties.unshift(fallback);
+        idx = 0;
+      }
+    }
 
     localProperties[idx] = {
       ...localProperties[idx],
@@ -1218,38 +1271,36 @@ export const dataService = {
     cloudSync.publishSnapshot('properties', localProperties);
     cloudStorage.saveCloudProperties(localProperties);
 
-    // 4. Sync to Supabase in background if online and valid UUID
+    // 4. Sync to Supabase in background (NON-BLOCKING) if online and valid UUID
     if (shouldAttemptSupabase() && isUuid(id)) {
-      try {
-        const updatePayload: Record<string, any> = {};
-        if (updates.title !== undefined) updatePayload.title = updates.title;
-        if (updates.description !== undefined) updatePayload.description = updates.description;
-        if (updates.vertical !== undefined) updatePayload.vertical = updates.vertical;
-        if (updates.location?.city !== undefined) updatePayload.city = updates.location.city;
-        if (updates.location?.area !== undefined) updatePayload.area = updates.location.area;
-        if (updates.location?.address !== undefined) updatePayload.address = updates.location.address;
-        if (updates.location?.lat !== undefined) updatePayload.latitude = updates.location.lat;
-        if (updates.location?.lng !== undefined) updatePayload.longitude = updates.location.lng;
-        if (updates.price_per_night !== undefined) updatePayload.price_per_night = Number(updates.price_per_night);
-        if (updates.currency !== undefined) updatePayload.currency = updates.currency;
-        if (updates.max_guests !== undefined) updatePayload.max_guests = Number(updates.max_guests);
-        if (updates.bedrooms !== undefined) updatePayload.bedrooms = Number(updates.bedrooms);
-        if (updates.beds !== undefined) updatePayload.beds = Number(updates.beds);
-        if (updates.bathrooms !== undefined) updatePayload.bathrooms = Number(updates.bathrooms);
-        if (updates.amenities !== undefined) updatePayload.amenities = updates.amenities;
-        if (updates.images !== undefined) updatePayload.images = updates.images;
-        if (updates.badge !== undefined) updatePayload.badge = updates.badge;
-        if (updates.status !== undefined) updatePayload.status = updates.status;
+      const updatePayload: Record<string, any> = {};
+      if (updates.title !== undefined) updatePayload.title = updates.title;
+      if (updates.description !== undefined) updatePayload.description = updates.description;
+      if (updates.vertical !== undefined) updatePayload.vertical = updates.vertical;
+      if (updates.location?.city !== undefined) updatePayload.city = updates.location.city;
+      if (updates.location?.area !== undefined) updatePayload.area = updates.location.area;
+      if (updates.location?.address !== undefined) updatePayload.address = updates.location.address;
+      if (updates.location?.lat !== undefined) updatePayload.latitude = updates.location.lat;
+      if (updates.location?.lng !== undefined) updatePayload.longitude = updates.location.lng;
+      if (updates.price_per_night !== undefined) updatePayload.price_per_night = Number(updates.price_per_night);
+      if (updates.currency !== undefined) updatePayload.currency = updates.currency;
+      if (updates.max_guests !== undefined) updatePayload.max_guests = Number(updates.max_guests);
+      if (updates.bedrooms !== undefined) updatePayload.bedrooms = Number(updates.bedrooms);
+      if (updates.beds !== undefined) updatePayload.beds = Number(updates.beds);
+      if (updates.bathrooms !== undefined) updatePayload.bathrooms = Number(updates.bathrooms);
+      if (updates.amenities !== undefined) updatePayload.amenities = updates.amenities;
+      if (updates.images !== undefined) updatePayload.images = updates.images;
+      if (updates.badge !== undefined) updatePayload.badge = updates.badge;
+      if (updates.status !== undefined) updatePayload.status = updates.status;
 
-        const { error } = await withTimeout(supabase.from('properties').update(updatePayload).eq('id', id), 8000);
-        if (error) {
-          markSupabaseFailure(error);
-        } else {
-          markSupabaseSuccess();
-        }
-      } catch (err) {
-        markSupabaseFailure(err);
-      }
+      withTimeout(supabase.from('properties').update(updatePayload).eq('id', id), 1500)
+        .then(({ error }) => {
+          if (error) markSupabaseFailure(error);
+          else markSupabaseSuccess();
+        })
+        .catch(err => {
+          markSupabaseFailure(err);
+        });
     }
 
     return localProperties[idx];
@@ -1280,16 +1331,17 @@ export const dataService = {
     cloudStorage.saveCloudProperties(localProperties);
 
     if (shouldAttemptSupabase() && isUuid(id)) {
-      try {
-        const payload: Record<string, any> = {};
-        if (updates.status !== undefined) payload.status = updates.status;
-        if (Object.keys(payload).length > 0) {
-          const { error } = await withTimeout(supabase.from('properties').update(payload).eq('id', id), 8000);
-          if (error) markSupabaseFailure(error);
-          else markSupabaseSuccess();
-        }
-      } catch (err) {
-        markSupabaseFailure(err);
+      const payload: Record<string, any> = {};
+      if (updates.status !== undefined) payload.status = updates.status;
+      if (Object.keys(payload).length > 0) {
+        withTimeout(supabase.from('properties').update(payload).eq('id', id), 1500)
+          .then(({ error }) => {
+            if (error) markSupabaseFailure(error);
+            else markSupabaseSuccess();
+          })
+          .catch(err => {
+            markSupabaseFailure(err);
+          });
       }
     }
 
@@ -1310,13 +1362,14 @@ export const dataService = {
     cloudStorage.saveCloudProperties(localProperties);
 
     if (shouldAttemptSupabase() && isUuid(id)) {
-      try {
-        const { error } = await withTimeout(supabase.from('properties').update({ status: target.status }).eq('id', id), 8000);
-        if (error) markSupabaseFailure(error);
-        else markSupabaseSuccess();
-      } catch (err) {
-        markSupabaseFailure(err);
-      }
+      withTimeout(supabase.from('properties').update({ status: target.status }).eq('id', id), 1500)
+        .then(({ error }) => {
+          if (error) markSupabaseFailure(error);
+          else markSupabaseSuccess();
+        })
+        .catch(err => {
+          markSupabaseFailure(err);
+        });
     }
 
     return target;
@@ -1331,13 +1384,14 @@ export const dataService = {
     cloudStorage.saveCloudProperties(localProperties, true);
 
     if (shouldAttemptSupabase() && isUuid(id)) {
-      try {
-        const { error } = await withTimeout(supabase.from('properties').delete().eq('id', id), 8000);
-        if (error) markSupabaseFailure(error);
-        else markSupabaseSuccess();
-      } catch (err) {
-        markSupabaseFailure(err);
-      }
+      withTimeout(supabase.from('properties').delete().eq('id', id), 1500)
+        .then(({ error }) => {
+          if (error) markSupabaseFailure(error);
+          else markSupabaseSuccess();
+        })
+        .catch(err => {
+          markSupabaseFailure(err);
+        });
     }
   },
 
@@ -1360,23 +1414,27 @@ export const dataService = {
     amenity?: string,
     includeDrafts: boolean = true
   ): Promise<Property[]> {
+    // If localProperties is empty for any reason, rehydrate from storage immediately
+    if (localProperties.length === 0) {
+      localProperties = loadPropertiesFromStorage();
+    }
+
     if (shouldAttemptSupabase()) {
       try {
         const { data, error } = await withTimeout(
           supabase.from('properties').select('*').order('created_at', { ascending: false }),
-          8000
+          1500
         );
         if (!error && data) {
           markSupabaseSuccess();
           const remoteList = data.map(mapRowToProperty).filter(p => !isDemoProperty(p));
           if (remoteList.length > 0) {
             const remoteMap = new Map(remoteList.map(rp => [rp.id, rp]));
-            const now = Date.now();
-            // Preserve only locally-created items from last 5 minutes that are still syncing
-            const pendingLocal = localProperties.filter(
-              lp => !remoteMap.has(lp.id) && !isDemoProperty(lp) && (now - ((lp as any)._localCreated || 0) < 300000)
+            // Preserve all custom local properties (do not purge them!)
+            const localOnly = localProperties.filter(
+              lp => !remoteMap.has(lp.id) && !isDemoProperty(lp)
             );
-            localProperties = [...remoteList, ...pendingLocal];
+            localProperties = [...localOnly, ...remoteList];
             savePropertiesToStorage(localProperties);
             cloudSync.publishSnapshot('properties', localProperties);
           }
