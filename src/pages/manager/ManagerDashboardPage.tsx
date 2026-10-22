@@ -42,8 +42,8 @@ export const ManagerDashboardPage: React.FC<ManagerDashboardPageProps> = ({ mana
   const [searchParams] = useSearchParams();
   const tabParam = searchParams.get('tab') || searchParams.get('view');
 
-  const [properties, setProperties] = useState<Property[]>([]);
-  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [properties, setProperties] = useState<Property[]>(() => dataService.getLocalProperties());
+  const [bookings, setBookings] = useState<Booking[]>(() => dataService.getLocalBookings());
   const [activeTab, setActiveTab] = useState<'bookings' | 'listings'>(
     tabParam === 'listings' ? 'listings' : 'bookings'
   );
@@ -115,8 +115,15 @@ export const ManagerDashboardPage: React.FC<ManagerDashboardPageProps> = ({ mana
 
   const loadData = async () => {
     try {
-      const allProps = await dataService.getProperties('all', undefined, undefined, true);
-      const b = await dataService.getBookings();
+      const localProps = dataService.getLocalProperties();
+      if (localProps.length > 0) setProperties(localProps);
+      const localB = dataService.getLocalBookings();
+      if (localB.length > 0) setBookings(localB);
+
+      const [allProps, b] = await Promise.all([
+        dataService.getProperties('all', undefined, undefined, true),
+        dataService.getBookings()
+      ]);
 
       setProperties(allProps);
       setBookings(b);
@@ -360,6 +367,8 @@ export const ManagerDashboardPage: React.FC<ManagerDashboardPageProps> = ({ mana
         alert('New listing published successfully to front-end!');
       }
 
+      setActiveTab('listings');
+      setProperties(dataService.getLocalProperties());
       setShowPropertyModal(false);
       loadData();
     } catch (err: any) {
@@ -372,17 +381,20 @@ export const ManagerDashboardPage: React.FC<ManagerDashboardPageProps> = ({ mana
   const handleDeleteProperty = async (id: string) => {
     if (confirm('Are you sure you want to remove this listing?')) {
       await dataService.deleteProperty(id);
+      setProperties(dataService.getLocalProperties());
       loadData();
     }
   };
 
   const handleToggleStatus = async (id: string) => {
     await dataService.togglePropertyStatus(id);
+    setProperties(dataService.getLocalProperties());
     loadData();
   };
 
   const handleOperationalStatusChange = async (id: string, newOpStatus: 'available' | 'occupied' | 'booked' | 'maintenance' | 'cleaning') => {
     await dataService.updatePropertyStatus(id, { operational_status: newOpStatus });
+    setProperties(dataService.getLocalProperties());
     loadData();
   };
 

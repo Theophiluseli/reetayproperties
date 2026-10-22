@@ -15,8 +15,10 @@ interface HomePageProps {
 }
 
 export const HomePage: React.FC<HomePageProps> = ({ activeVertical, onVerticalChange }) => {
-  const [properties, setProperties] = useState<Property[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [properties, setProperties] = useState<Property[]>(() =>
+    dataService.getLocalProperties().filter(p => (p.vertical || 'stays') === activeVertical && p.status === 'published')
+  );
+  const [loading, setLoading] = useState(false);
   const [isMapView, setIsMapView] = useState(false);
   const [showFiltersModal, setShowFiltersModal] = useState(false);
 

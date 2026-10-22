@@ -64,8 +64,8 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ adminUse
   const [searchParams] = useSearchParams();
   const tabParam = searchParams.get('tab') || searchParams.get('view');
 
-  const [properties, setProperties] = useState<Property[]>([]);
-  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [properties, setProperties] = useState<Property[]>(() => dataService.getLocalProperties());
+  const [bookings, setBookings] = useState<Booking[]>(() => dataService.getLocalBookings());
   const [activeTab, setActiveTab] = useState<'bookings' | 'listings' | 'staff' | 'clients' | 'financials' | 'incidents'>(
     (tabParam === 'settings' ? 'staff' : tabParam as any) || 'bookings'
   );
@@ -187,11 +187,24 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ adminUse
 
   const loadAdminData = async () => {
     try {
-      const allProps = await dataService.getProperties('all', undefined, undefined, true);
-      const b = await dataService.getBookings();
-      const st = await dataService.getStaffAccounts();
-      const inc = await dataService.getIncidentReports();
-      const health = await dataService.getDatabaseHealth();
+      // 1. Instant sync from local in-memory cache (0ms)
+      const localProps = dataService.getLocalProperties();
+      if (localProps.length > 0) {
+        setProperties(localProps);
+      }
+      const localB = dataService.getLocalBookings();
+      if (localB.length > 0) {
+        setBookings(localB);
+      }
+
+      // 2. Fetch all datasets concurrently without blocking each other
+      const [allProps, b, st, inc, health] = await Promise.all([
+        dataService.getProperties('all', undefined, undefined, true),
+        dataService.getBookings(),
+        dataService.getStaffAccounts(),
+        dataService.getIncidentReports(),
+        dataService.getDatabaseHealth()
+      ]);
       setProperties(allProps);
       setBookings(b);
       setStaffAccounts(st);
@@ -702,15 +715,25 @@ Password: ${staff.password || 'staff123'}`;
 
       if (editingProperty) {
         await dataService.updateProperty(editingProperty.id, payload);
-        setStaffNotification('Listing updated successfully!');
+        setStaffNotification(`Listing "${payload.title}" updated successfully!`);
       } else {
         await dataService.createProperty(payload);
-        setStaffNotification('New listing published to platform!');
+        setStaffNotification(`New listing "${payload.title}" published & saved to platform!`);
       }
+
+      // Immediately focus inventory table and switch vertical so the new listing is highlighted
+      setActiveTab('listings');
+      if (payload.vertical) {
+        setSelectedVertical(payload.vertical as VerticalType);
+        setInventoryVerticalFilter(payload.vertical as VerticalType);
+      }
+
+      // Instant 0ms synchronous local UI update
+      setProperties(dataService.getLocalProperties());
 
       setShowPropertyModal(false);
       loadAdminData();
-      setTimeout(() => setStaffNotification(''), 4000);
+      setTimeout(() => setStaffNotification(''), 4500);
     } catch (err: any) {
       alert(err.message || 'Failed to save listing');
     } finally {
@@ -738,8 +761,11 @@ Password: ${staff.password || 'staff123'}`;
       setWalkInName('');
       setWalkInEmail('');
       setWalkInPhone('');
+      setBookings(dataService.getLocalBookings());
+      setProperties(dataService.getLocalProperties());
+      setStaffNotification('Walk-in booking registered! Dates are now locked on the front-end calendar.');
+      setTimeout(() => setStaffNotification(''), 4000);
       loadAdminData();
-      alert('Walk-in booking registered! Dates are now locked on the front-end calendar.');
     } catch (err: any) {
       setWalkInError(err.message || 'Error recording walk-in booking');
     }
@@ -747,23 +773,37 @@ Password: ${staff.password || 'staff123'}`;
 
   const handleStatusChange = async (bookingId: string, newStatus: 'upcoming' | 'active' | 'completed' | 'cancelled') => {
     await dataService.updateBookingStatus(bookingId, newStatus);
+    setBookings(dataService.getLocalBookings());
     loadAdminData();
   };
 
   const handleDeleteProperty = async (id: string) => {
-    if (confirm('Are you sure you want to remove this property listing?')) {
+    if (confirm('Are you sure you want to permanently remove this property listing?')) {
       await dataService.deleteProperty(id);
+      setProperties(dataService.getLocalProperties());
+      setStaffNotification('Listing deleted and permanently removed from platform.');
+      setTimeout(() => setStaffNotification(''), 3500);
       loadAdminData();
     }
   };
 
   const handleToggleStatus = async (id: string) => {
-    await dataService.togglePropertyStatus(id);
+    const updated = await dataService.togglePropertyStatus(id);
+    setProperties(dataService.getLocalProperties());
+    if (updated) {
+      setStaffNotification(`Listing status updated: ${updated.status === 'published' ? 'PUBLISHED (Live)' : 'DRAFT (Hidden)'}`);
+      setTimeout(() => setStaffNotification(''), 3500);
+    }
     loadAdminData();
   };
 
   const handleOperationalStatusChange = async (id: string, newOpStatus: 'available' | 'occupied' | 'booked' | 'maintenance' | 'cleaning') => {
-    await dataService.updatePropertyStatus(id, { operational_status: newOpStatus });
+    const updated = await dataService.updatePropertyStatus(id, { operational_status: newOpStatus });
+    setProperties(dataService.getLocalProperties());
+    if (updated) {
+      setStaffNotification(`Operational status changed to ${newOpStatus.toUpperCase()}`);
+      setTimeout(() => setStaffNotification(''), 3500);
+    }
     loadAdminData();
   };
 

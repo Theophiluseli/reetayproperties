@@ -32,8 +32,8 @@ export const ReceptionDashboardPage: React.FC<ReceptionDashboardPageProps> = ({ 
   if (!receptionUser) {
     return <Navigate to="/portal/login" replace />;
   }
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [properties, setProperties] = useState<Property[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>(() => dataService.getLocalBookings());
+  const [properties, setProperties] = useState<Property[]>(() => dataService.getLocalProperties().filter(p => (p.vertical || 'stays') === 'stays'));
   const [showWalkInModal, setShowWalkInModal] = useState(false);
   const [selectedViewBooking, setSelectedViewBooking] = useState<Booking | null>(null);
 
@@ -84,9 +84,18 @@ export const ReceptionDashboardPage: React.FC<ReceptionDashboardPageProps> = ({ 
   }, [receptionUser]);
 
   const loadData = async () => {
-    const allProps = await dataService.getProperties('stays');
-    const allBookings = await dataService.getBookings();
-    const handovers = await dataService.getShiftHandovers();
+    const localP = dataService.getLocalProperties().filter(p => (p.vertical || 'stays') === 'stays');
+    if (localP.length > 0) setProperties(localP);
+    const localB = dataService.getLocalBookings();
+    if (localB.length > 0) setBookings(localB);
+
+    const [allProps, allBookings, handovers, staffList] = await Promise.all([
+      dataService.getProperties('stays'),
+      dataService.getBookings(),
+      dataService.getShiftHandovers(),
+      dataService.getStaffAccounts()
+    ]);
+
     setProperties(allProps);
     setBookings(allBookings);
     setShiftHandovers(handovers);
@@ -96,7 +105,6 @@ export const ReceptionDashboardPage: React.FC<ReceptionDashboardPageProps> = ({ 
     }
 
     // Match permissions for current logged in receptionist
-    const staffList = await dataService.getStaffAccounts();
     const currentUserEmail = receptionUser?.email || 'reception@reetay.com';
     const currentStaff = staffList.find(s => s.email.toLowerCase() === currentUserEmail.toLowerCase());
     if (currentStaff && currentStaff.permissions) {

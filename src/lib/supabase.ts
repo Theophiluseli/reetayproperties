@@ -163,10 +163,34 @@ const saveStaffToStorage = (staffList: StaffAccount[]) => {
 
 // Storage keys for persistent local storage caching
 const PROPERTIES_STORAGE_KEY = 'reetay_properties_v6';
+const DELETED_PROPERTIES_STORAGE_KEY = 'reetay_deleted_properties_v6';
 const BOOKINGS_STORAGE_KEY = 'reetay_bookings_v6';
 const REVIEWS_STORAGE_KEY = 'reetay_reviews_v6';
 const FAVORITES_STORAGE_KEY = 'reetay_favorites_v6';
 const SESSION_STORAGE_KEY = 'reetay_active_session_v1';
+
+export const getDeletedPropertyIds = (): Set<string> => {
+  try {
+    const saved = localStorage.getItem(DELETED_PROPERTIES_STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) return new Set(parsed);
+    }
+  } catch (e) {
+    // ignore
+  }
+  return new Set();
+};
+
+export const addDeletedPropertyId = (id: string) => {
+  try {
+    const set = getDeletedPropertyIds();
+    set.add(id);
+    localStorage.setItem(DELETED_PROPERTIES_STORAGE_KEY, JSON.stringify(Array.from(set)));
+  } catch (e) {
+    // ignore
+  }
+};
 
 export const DEMO_PROPERTY_IDS = new Set<string>();
 
@@ -232,13 +256,14 @@ const INITIAL_INCIDENTS: IncidentReport[] = [
 ];
 
 export const loadPropertiesFromStorage = (): Property[] => {
-  const baseMock = MOCK_PROPERTIES.filter(p => !isDemoProperty(p));
+  const deletedIds = getDeletedPropertyIds();
+  const baseMock = MOCK_PROPERTIES.filter(p => !isDemoProperty(p) && !deletedIds.has(p.id));
   try {
     const saved = localStorage.getItem(PROPERTIES_STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        const cleaned = parsed.filter((p: any) => !isDemoProperty(p));
+        const cleaned = parsed.filter((p: any) => !isDemoProperty(p) && !deletedIds.has(p.id));
         if (cleaned.length > 0) {
           const itemMap = new Map<string, Property>();
           for (const p of baseMock) {
@@ -262,7 +287,7 @@ export const loadPropertiesFromStorage = (): Property[] => {
     if (savedV5) {
       const parsedV5 = JSON.parse(savedV5);
       if (Array.isArray(parsedV5) && parsedV5.length > 0) {
-        const customOnly = parsedV5.filter((p: any) => !isDemoProperty(p));
+        const customOnly = parsedV5.filter((p: any) => !isDemoProperty(p) && !deletedIds.has(p.id));
         if (customOnly.length > 0) {
           const itemMap = new Map<string, Property>();
           for (const p of baseMock) {
@@ -619,6 +644,25 @@ export const dataService = {
     localFavorites = loadFavoritesFromStorage();
     localIncidentReports = loadIncidentsFromStorage();
     localStaffAccounts = loadStaffFromStorage();
+  },
+
+  // Instant synchronous in-memory read (0ms)
+  getLocalProperties(): Property[] {
+    const deletedIds = getDeletedPropertyIds();
+    if (localProperties.length === 0) {
+      localProperties = loadPropertiesFromStorage();
+    }
+    return localProperties.filter(p => !isDemoProperty(p) && !deletedIds.has(p.id));
+  },
+
+  getLocalBookings(): Booking[] {
+    if (localBookings.length === 0) {
+      localBookings = loadBookingsFromStorage();
+    }
+    return localBookings.map(b => ({
+      ...b,
+      property: b.property || localProperties.find(p => p.id === b.property_id) || localProperties[0]
+    }));
   },
 
   // Authentication
@@ -1017,23 +1061,23 @@ export const dataService = {
     let propertiesCount = localProperties.length;
     let incidentReportsCount = localIncidentReports.length;
 
-    if (isSupabaseConfigured && isSupabaseReachable !== false) {
+    if (shouldAttemptSupabase()) {
       try {
         const { count, error } = await withTimeout(
           supabase.from('properties').select('id', { count: 'exact', head: true }),
-          1500
+          800
         );
         if (!error) {
           isConnected = true;
-          isSupabaseReachable = true;
+          markSupabaseSuccess();
           if (typeof count === 'number') propertiesCount = count;
         } else {
           isConnected = false;
-          isSupabaseReachable = false;
+          markSupabaseFailure(error);
         }
       } catch (e) {
         isConnected = false;
-        isSupabaseReachable = false;
+        markSupabaseFailure(e);
       }
     }
     const latency = Math.round(performance.now() - start);
@@ -1376,6 +1420,7 @@ export const dataService = {
   },
 
   async deleteProperty(id: string): Promise<void> {
+    addDeletedPropertyId(id);
     localProperties = localProperties.filter(p => p.id !== id);
     savePropertiesToStorage(localProperties);
     broadcastDataChange('properties', 'delete', null, id);
@@ -1419,60 +1464,47 @@ export const dataService = {
       localProperties = loadPropertiesFromStorage();
     }
 
-    if (shouldAttemptSupabase()) {
-      try {
-        const { data, error } = await withTimeout(
-          supabase.from('properties').select('*').order('created_at', { ascending: false }),
-          1500
-        );
-        if (!error && data) {
-          markSupabaseSuccess();
-          const remoteList = data.map(mapRowToProperty).filter(p => !isDemoProperty(p));
-          if (remoteList.length > 0) {
-            const remoteMap = new Map(remoteList.map(rp => [rp.id, rp]));
-            // Preserve all custom local properties (do not purge them!)
-            const localOnly = localProperties.filter(
-              lp => !remoteMap.has(lp.id) && !isDemoProperty(lp)
-            );
-            localProperties = [...localOnly, ...remoteList];
-            savePropertiesToStorage(localProperties);
-            cloudSync.publishSnapshot('properties', localProperties);
-          }
-        } else if (error) {
-          markSupabaseFailure(error);
-        }
-      } catch (err) {
-        markSupabaseFailure(err);
-      }
-    }
+    const deletedIds = getDeletedPropertyIds();
 
-    // Fallback: Query persistent global cloud storage if local is empty or Supabase is offline
-    if (localProperties.length === 0 || isSupabaseReachable === false) {
-      try {
-        const cloudProps = await cloudStorage.fetchCloudProperties();
-        if (cloudProps && cloudProps.length > 0) {
-          const localMap = new Map(localProperties.map(p => [p.id, p]));
-          let hasChanges = false;
-          for (const cp of cloudProps) {
-            if (!localMap.has(cp.id)) {
-              localMap.set(cp.id, cp);
-              hasChanges = true;
+    // Stale-While-Revalidate: fetch remote in background so callers get instant 0ms responses
+    if (shouldAttemptSupabase()) {
+      const runRemoteFetch = async () => {
+        try {
+          const { data, error } = await withTimeout(
+            supabase.from('properties').select('*').order('created_at', { ascending: false }),
+            1500
+          );
+          if (!error && data && data.length > 0) {
+            markSupabaseSuccess();
+            const remoteList = data.map(mapRowToProperty).filter(p => !isDemoProperty(p) && !deletedIds.has(p.id));
+            if (remoteList.length > 0) {
+              const remoteMap = new Map(remoteList.map(rp => [rp.id, rp]));
+              // Preserve all custom local properties (do not purge them!)
+              const localOnly = localProperties.filter(
+                lp => !remoteMap.has(lp.id) && !isDemoProperty(lp) && !deletedIds.has(lp.id)
+              );
+              localProperties = [...localOnly, ...remoteList];
+              savePropertiesToStorage(localProperties);
+              cloudSync.publishSnapshot('properties', localProperties);
             }
+          } else if (error) {
+            markSupabaseFailure(error);
           }
-          if (hasChanges) {
-            localProperties = Array.from(localMap.values());
-            savePropertiesToStorage(localProperties);
-          }
-        } else if (localProperties.length > 0) {
-          cloudStorage.saveCloudProperties(localProperties);
+        } catch (err) {
+          markSupabaseFailure(err);
         }
-      } catch (e) {
-        // ignore
+      };
+
+      if (localProperties.length === 0) {
+        await runRemoteFetch();
+      } else {
+        runRemoteFetch();
       }
     }
 
     return localProperties.filter(p => {
       if (isDemoProperty(p)) return false;
+      if (deletedIds.has(p.id)) return false;
       if (vertical && vertical !== 'all' && p.vertical !== vertical) return false;
       if (!includeDrafts && p.status === 'draft') return false;
       if (query) {
@@ -1537,52 +1569,40 @@ export const dataService = {
 
   // Bookings & Calendar Availability
   async getBookings(): Promise<Booking[]> {
-    if (isSupabaseConfigured && isSupabaseReachable !== false) {
-      try {
-        const { data, error } = await withTimeout(
-          supabase.from('bookings').select('*, property:properties(*)').order('created_at', { ascending: false }),
-          1500
-        );
-        if (!error && data && data.length > 0) {
-          isSupabaseReachable = true;
-          const mapped: Booking[] = data.map((b: any) => ({
-            ...b,
-            property: b.property ? mapRowToProperty(b.property) : (localProperties.find(p => p.id === b.property_id) || localProperties[0])
-          }));
-          const remoteIds = new Set(mapped.map(m => m.id));
-          const localOnly = localBookings.filter(lb => !remoteIds.has(lb.id));
-          localBookings = [...mapped, ...localOnly];
-          saveBookingsToStorage(localBookings);
-          return localBookings;
-        }
-      } catch (err) {
-        isSupabaseReachable = false;
-        console.warn('Supabase getBookings timed out or offline, using persistent local bookings:', err);
-      }
+    if (localBookings.length === 0) {
+      localBookings = loadBookingsFromStorage();
     }
 
-    // Fallback: check global cloud storage if local is empty or offline
-    if (localBookings.length === 0 || isSupabaseReachable === false) {
-      try {
-        const cloudBookings = await cloudStorage.fetchCloudBookings();
-        if (cloudBookings && cloudBookings.length > 0) {
-          const localMap = new Map(localBookings.map(b => [b.id, b]));
-          let hasChanges = false;
-          for (const cb of cloudBookings) {
-            if (!localMap.has(cb.id)) {
-              localMap.set(cb.id, cb);
-              hasChanges = true;
-            }
-          }
-          if (hasChanges) {
-            localBookings = Array.from(localMap.values());
+    if (shouldAttemptSupabase()) {
+      const runRemoteBookings = async () => {
+        try {
+          const { data, error } = await withTimeout(
+            supabase.from('bookings').select('*, property:properties(*)').order('created_at', { ascending: false }),
+            1500
+          );
+          if (!error && data && data.length > 0) {
+            markSupabaseSuccess();
+            const mapped: Booking[] = data.map((b: any) => ({
+              ...b,
+              property: b.property ? mapRowToProperty(b.property) : (localProperties.find(p => p.id === b.property_id) || localProperties[0])
+            }));
+            const remoteIds = new Set(mapped.map(m => m.id));
+            const localOnly = localBookings.filter(lb => !remoteIds.has(lb.id));
+            localBookings = [...mapped, ...localOnly];
             saveBookingsToStorage(localBookings);
+            cloudSync.publishSnapshot('bookings', localBookings);
+          } else if (error) {
+            markSupabaseFailure(error);
           }
-        } else if (localBookings.length > 0) {
-          cloudStorage.saveCloudBookings(localBookings);
+        } catch (err) {
+          markSupabaseFailure(err);
         }
-      } catch (e) {
-        // ignore
+      };
+
+      if (localBookings.length === 0) {
+        await runRemoteBookings();
+      } else {
+        runRemoteBookings();
       }
     }
 
@@ -2230,6 +2250,7 @@ registerMutationHandler((table, action, data, id) => {
     } else if (action === 'delete') {
       const targetId = id || data?.id;
       if (targetId) {
+        addDeletedPropertyId(targetId);
         localProperties = localProperties.filter(p => p.id !== targetId);
         savePropertiesToStorage(localProperties);
       }
@@ -2259,10 +2280,11 @@ registerMutationHandler((table, action, data, id) => {
 });
 
 // Register cloud snapshot handler so remote devices receive listings upon connecting
-// Safety Rule: Empty snapshots or demo properties NEVER contaminate local properties
+// Safety Rule: Empty snapshots, deleted IDs, or demo properties NEVER contaminate local properties
 registerSnapshotHandler((table, items) => {
+  const deletedIds = getDeletedPropertyIds();
   if (table === 'properties' && Array.isArray(items)) {
-    const validItems = items.filter(p => !isDemoProperty(p));
+    const validItems = items.filter(p => !isDemoProperty(p) && !deletedIds.has(p.id));
     if (validItems.length > 0) {
       const localMap = new Map(localProperties.map(p => [p.id, p]));
       let hasChanges = false;
